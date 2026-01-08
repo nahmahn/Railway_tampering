@@ -1,11 +1,37 @@
 # Railway Tampering & Anomaly Detection System
 
+![Status](https://img.shields.io/badge/status-active-success.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+
 ## Overview
 Our solution is a **Meta-Model–based Mixture-of-Experts architecture** designed for real-time detection of anomalies and intentional track tampering across large rail networks. By fusing structural, visual, thermal, and contextual evidence, the system performs geo-referenced anomaly analysis, pinpoints affected track segments and hotspots, and generates actionable outputs including real-time alerts, visualizations, and operational action reports.
 
 ---
 
-## 🚀 Key Features
+## 🛠 Tech Stack
+
+### Frontend
+![Next.js](https://img.shields.io/badge/next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)
+![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
+![Tailwind CSS](https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white)
+![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)
+![Recharts](https://img.shields.io/badge/Recharts-22b5bf?style=for-the-badge&logo=react&logoColor=white)
+
+### Backend & AI
+![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=for-the-badge&logo=PyTorch&logoColor=white)
+![OpenCV](https://img.shields.io/badge/opencv-%23white.svg?style=for-the-badge&logo=opencv&logoColor=white)
+![Google Gemini](https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=google%20gemini&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
+
+### Data & Tools
+![Pandas](https://img.shields.io/badge/pandas-%23150458.svg?style=for-the-badge&logo=pandas&logoColor=white)
+![NumPy](https://img.shields.io/badge/numpy-%23013243.svg?style=for-the-badge&logo=numpy&logoColor=white)
+![Git](https://img.shields.io/badge/git-%23F05033.svg?style=for-the-badge&logo=git&logoColor=white)
+
+---
+
+## Key Features
 
 ### Real-Time Anomaly & Tampering Detection
 Continuous monitoring enables early detection of abnormal vibrations, structural deviations, thermal hotspots, foreign object presence, and unauthorized human activity before these escalate into safety-critical incidents.
@@ -30,7 +56,7 @@ The system detects intentional track tampering by correlating structural, vibrat
 
 ---
 
-## 🌟 Unique Selling Points (USP)
+## Unique Selling Points (USP)
 
 ### 1. Evidence-Driven Mixture-of-Experts Architecture
 Unlike monolithic models, the system dynamically selects expert reasoning paths based on available evidence, enabling robustness, scalability, and explainability across large rail networks.
@@ -49,5 +75,42 @@ The architecture assumes imperfect sensor coverage and varying data quality, mak
 
 ---
 
-## 🎥 Demonstration
+## Getting Started
+
+### Prerequisites
+*   Node.js 18+
+*   Python 3.9+
+*   Git
+
+### Installation
+
+1.  **Clone the repository**
+    ```bash
+    git clone https://github.com/nahmahn/Railway_tampering.git
+    cd Railway_tampering
+    ```
+
+2.  **Frontend Setup**
+    ```bash
+    cd frontend
+    npm install
+    npm run dev
+    ```
+
+3.  **Backend Setup**
+    ```bash
+    # (Optional) Create a virtual environment
+    python -m venv .venv
+    # Windows
+    .venv\Scripts\activate
+    # macOS/Linux
+    source .venv/bin/activate
+
+    pip install -r backend/requirements.txt
+    ```
+
+## Demonstration
 Check out our live demonstration here: [Project Demo](https://shorturl.at/MmCfg)
+
+---
+*Built for Hack4Delhi*
