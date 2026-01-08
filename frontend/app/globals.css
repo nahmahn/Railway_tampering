@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  /* Custom Government Colors */
+  --color-govt-navy: #0a2647;
+  --color-govt-blue: #144272;
+  --color-govt-orange: #ff9933;
+  --color-govt-green: #138808;
+  --color-govt-gray: #f3f4f6;
+  --color-govt-border: #e5e7eb;
+
+  /* Alert Colors */
+  --color-alert-red: #dc2626;
+  --color-alert-yellow: #ca8a04;
+  --color-alert-green: #16a34a;
+
+  /* Font Family Override */
+  --font-sans: var(--font-inter), sans-serif;
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #111827;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-sans);
+}
