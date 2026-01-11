@@ -1,0 +1,47 @@
+{
+  "detection": {
+    "gauge_deviation_threshold": 0.05,
+    "gauge_std_threshold": 0.03,
+    "rail_misalignment_threshold": 0.08,
+    "vertical_displacement_threshold": 0.05,
+    "continuity_threshold": 0.85,
+    "debris_density_threshold": 0.05,
+    "debris_count_threshold": 100,
+    "sleeper_missing_threshold": 0.3,
+    "confidence_weights": {
+      "gauge": 0.25,
+      "alignment": 0.20,
+      "vertical": 0.20,
+      "continuity": 0.15,
+      "debris": 0.15,
+      "sleepers": 0.05
+    }
+  },
+  "processing": {
+    "outlier_removal": {
+      "enabled": true,
+      "nb_neighbors": 20,
+      "std_ratio": 2.0
+    },
+    "rail_parameters": {
+      "standard_gauge_m": 1.435,
+      "rail_height_range_m": [0.10, 0.20],
+      "track_width_tolerance_m": 0.05
+    }
+  },
+  "output": {
+    "format_version": "1.0",
+    "include_features": true,
+    "include_metadata": true,
+    "pretty_print": true
+  },
+  "alerts": {
+    "enabled": true,
+    "severity_levels": {
+      "low": "INFO",
+      "medium": "WARNING",
+      "high": "ALERT",
+      "critical": "CRITICAL"
+    }
+  }
+}
