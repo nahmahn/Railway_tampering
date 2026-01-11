@@ -15,13 +15,13 @@ This module processes LIDAR point cloud data to detect various types of railway 
 
 ## Features
 
-✅ **Multi-format Support**: Handles `.npy`, `.pcd`, `.ply`, `.las`, `.laz` files  
-✅ **Real-time Processing**: Fast detection algorithms  
-✅ **JSON Output**: Structured, informative detection results  
-✅ **Batch Processing**: Process multiple scans efficiently  
-✅ **Confidence Scoring**: AI-driven confidence levels  
-✅ **Alert Generation**: Real-time alerts for critical findings  
-✅ **Geo-referencing**: GPS coordinate support  
+- **Multi-format Support**: Handles `.npy`, `.pcd`, `.ply`, `.las`, `.laz` files
+- **Real-time Processing**: Fast detection algorithms
+- **JSON Output**: Structured, informative detection results
+- **Batch Processing**: Process multiple scans efficiently
+- **Confidence Scoring**: AI-driven confidence levels
+- **Alert Generation**: Real-time alerts for critical findings
+- **Geo-referencing**: GPS coordinate support  
 
 ## Installation
 
@@ -377,7 +377,7 @@ python main.py --demo
 
 ## Contributing
 
-Contributions welcome! Areas for improvement:
+Contributions welcome. Areas for improvement:
 - Additional anomaly detection patterns
 - Support for more point cloud formats
 - Performance optimizations
@@ -390,7 +390,3 @@ Part of the RailMonitor project for railway infrastructure monitoring.
 ## Contact
 
 For questions or support, please refer to the main project documentation.
-
----
-
-**Built with** ❤️ **for safer railways**
