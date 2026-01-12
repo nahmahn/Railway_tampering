@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { AlertTriangle, Activity, CheckCircle, Database, Eye, TrendingUp, TrendingDown } from 'lucide-react';
+import { RPFDashboard, MaintenanceDashboard, CCRDashboard } from './RoleDashboards';
 
 function StatCard({ label, value, subtext, icon: Icon, color, trend }: any) {
     return (
@@ -37,11 +38,8 @@ function StatCard({ label, value, subtext, icon: Icon, color, trend }: any) {
     );
 }
 
-
-
-export default function OverviewPage() {
+function SystemAdminDashboard() {
     const [expandedNode, setExpandedNode] = useState<string | null>(null);
-
     const [time, setTime] = useState<string>("");
 
     useEffect(() => {
@@ -57,8 +55,6 @@ export default function OverviewPage() {
                 <p className="text-gray-500">Operational Real-time Snapshot</p>
             </div>
 
-
-
             {/* Operations Summary */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <StatCard label="Active Alerts" value="3" subtext="+2 since last hour" icon={AlertTriangle} color="red" trend={12} />
@@ -69,7 +65,6 @@ export default function OverviewPage() {
 
             {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
                 {/* Pipeline Visualization (Premium Light Theme) */}
                 <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative transition-all duration-500">
                     {/* Technical Background Pattern (Dot Grid) */}
@@ -274,4 +269,26 @@ export default function OverviewPage() {
             </div>
         </div>
     );
+}
+
+export default function OverviewPage() {
+    const [userRole, setUserRole] = useState<string | null>(null);
+
+    useEffect(() => {
+        const role = localStorage.getItem('userRole');
+        setUserRole(role);
+    }, []);
+
+    switch (userRole) {
+        case 'Railway Protection Force (RPF)':
+            return <RPFDashboard />;
+        case 'Track Maintenance':
+            return <MaintenanceDashboard />;
+
+        case 'Central Control Room':
+            return <CCRDashboard />;
+        case 'System Administrator':
+        default:
+            return <SystemAdminDashboard />;
+    }
 }

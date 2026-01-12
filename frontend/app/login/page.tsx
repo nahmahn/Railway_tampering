@@ -3,14 +3,22 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Shield, ArrowRight } from 'lucide-react';
+import { GoogleLogin } from '@react-oauth/google';
 
 export default function LoginPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
 
+    const [role, setRole] = useState("Railway Protection Force (RPF)");
+
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
+        // Store the selected role for the session
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('userRole', role);
+        }
+
         // Simulate delay
         setTimeout(() => {
             router.push('/dashboard/overview');
@@ -52,22 +60,57 @@ export default function LoginPage() {
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-                        <select className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-govt-blue focus:border-govt-blue outline-none bg-white">
+                        <select
+                            value={role}
+                            onChange={(e) => setRole(e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-govt-blue focus:border-govt-blue outline-none bg-white"
+                        >
                             <option>Railway Protection Force (RPF)</option>
-                            <option>Signal & Telecommunication</option>
+
                             <option>Track Maintenance</option>
                             <option>Central Control Room</option>
+                            <option>System Administrator</option>
                         </select>
                     </div>
 
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full bg-govt-navy hover:bg-govt-blue text-white font-medium py-2 rounded-md transition-colors flex items-center justify-center gap-2 group"
+                        className="w-full bg-govt-navy hover:bg-govt-blue text-white font-medium py-2 rounded-md transition-colors flex items-center justify-center gap-2 group mb-4"
                     >
                         {loading ? 'Authenticating...' : 'Secure Authorization'}
                         {!loading && <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />}
                     </button>
+
+                    <div className="relative">
+                        <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-gray-300" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-white px-2 text-gray-500">Or continue with</span>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-center mt-4">
+                        <GoogleLogin
+                            onSuccess={credentialResponse => {
+                                console.log(credentialResponse);
+                                if (typeof window !== 'undefined') {
+                                    localStorage.setItem('userRole', role);
+                                }
+                                setLoading(true); // Show loading state
+                                setTimeout(() => {
+                                    router.push('/dashboard/overview');
+                                }, 1000);
+                            }}
+                            onError={() => {
+                                console.log('Login Failed');
+                            }}
+                            theme="outline"
+                            size="large"
+                            width="250"
+                        />
+                    </div>
                 </form>
 
                 <div className="bg-gray-50 px-8 py-4 text-center border-t border-gray-100">

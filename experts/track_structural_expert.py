@@ -58,6 +58,20 @@ try:
 except ImportError:
     XGB_AVAILABLE = False
 
+try:
+    import matplotlib
+    matplotlib.use('Agg')  # Non-interactive backend
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    MATPLOTLIB_AVAILABLE = True
+    print("✅ Matplotlib and Seaborn loaded successfully for chart generation")
+except ImportError as e:
+    MATPLOTLIB_AVAILABLE = False
+    print(f"⚠️ Matplotlib/Seaborn not available: {e}. Charts will not be generated.")
+
+import base64
+from io import BytesIO
+
 
 class VibrationAnomalyType(Enum):
     """Types of vibration/structural anomalies."""
@@ -244,6 +258,88 @@ class TrackStructuralExpert:
         
         return int(prediction), probability
     
+    def generate_vibration_charts(self, data: np.ndarray, stats: Dict[str, Any]) -> Dict[str, str]:
+        """Generate professional charts using matplotlib/seaborn and return as base64 images."""
+        if not MATPLOTLIB_AVAILABLE:
+            return {}
+        
+        charts = {}
+        
+        try:
+            # Set style
+            sns.set_style("whitegrid")
+            plt.rcParams['figure.facecolor'] = 'white'
+            
+            # 1. Time Series Plot
+            fig, axes = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
+            fig.suptitle('Vibration Time Series Analysis', fontsize=14, fontweight='bold')
+            
+            axes_labels = ['X-Axis', 'Y-Axis', 'Z-Axis']
+            colors = ['#3b82f6', '#10b981', '#8b5cf6']
+            
+            for idx, (axis_name, ax, color) in enumerate(zip(['x', 'y', 'z'], axes, colors)):
+                axis_data = data[:, idx]
+                sampled_indices = np.linspace(0, len(axis_data)-1, min(1000, len(axis_data)), dtype=int)
+                sampled_data = axis_data[sampled_indices]
+                
+                # Plot data
+                ax.plot(sampled_indices, sampled_data, color=color, linewidth=1, alpha=0.7, label='Vibration')
+                
+                # Add mean line
+                mean_val = stats[axis_name]['mean']
+                ax.axhline(y=mean_val, color=color, linestyle='--', linewidth=1.5, alpha=0.8, label=f'Mean: {mean_val:.2f}')
+                
+                # Add median line
+                median_val = stats[axis_name]['median']
+                ax.axhline(y=median_val, color='orange', linestyle=':', linewidth=1.5, alpha=0.6, label=f'Median: {median_val:.2f}')
+                
+                ax.set_ylabel(f'{axes_labels[idx]} (m/s²)', fontweight='bold')
+                ax.legend(loc='upper right', fontsize=8)
+                ax.grid(True, alpha=0.3)
+            
+            axes[-1].set_xlabel('Sample Index', fontweight='bold')
+            plt.tight_layout()
+            
+            # Convert to base64
+            buffer = BytesIO()
+            plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
+            buffer.seek(0)
+            charts['time_series'] = base64.b64encode(buffer.read()).decode('utf-8')
+            plt.close(fig)
+            
+            # 2. Heatmap
+            fig, ax = plt.subplots(figsize=(14, 4))
+            
+            # Sample data for heatmap (100 points per axis)
+            heatmap_data = []
+            for idx in range(3):
+                axis_data = data[:, idx]
+                sampled_indices = np.linspace(0, len(axis_data)-1, 100, dtype=int)
+                heatmap_data.append(axis_data[sampled_indices])
+            
+            heatmap_array = np.array(heatmap_data)
+            
+            # Create heatmap
+            sns.heatmap(heatmap_array, cmap='RdYlBu_r', cbar_kws={'label': 'Acceleration (m/s²)'},
+                       yticklabels=['X-Axis', 'Y-Axis', 'Z-Axis'], ax=ax, 
+                       xticklabels=False, linewidths=0)
+            
+            ax.set_title('Vibration Intensity Heatmap (3-Axis)', fontsize=14, fontweight='bold', pad=15)
+            ax.set_xlabel('Sample Index (100 points)', fontweight='bold')
+            plt.tight_layout()
+            
+            # Convert to base64
+            buffer = BytesIO()
+            plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
+            buffer.seek(0)
+            charts['heatmap'] = base64.b64encode(buffer.read()).decode('utf-8')
+            plt.close(fig)
+            
+        except Exception as e:
+            print(f"Error generating charts: {e}")
+        
+        return charts
+    
     def detect_data_type(self, df: pd.DataFrame) -> str:
         """Detect the type of CSV data based on columns."""
         columns_lower = [c.lower() for c in df.columns]
@@ -412,27 +508,48 @@ class TrackStructuralExpert:
         
         data = df[[x_col, y_col, z_col]].values
         
-        # Calculate basic statistics
+        # Calculate basic statistics including median and RMS
         result.vibration_stats = {
             "x": {
                 "mean": float(np.mean(data[:, 0])),
+                "median": float(np.median(data[:, 0])),
                 "std": float(np.std(data[:, 0])),
+                "rms": float(np.sqrt(np.mean(data[:, 0]**2))),
                 "max": float(np.max(data[:, 0])),
                 "min": float(np.min(data[:, 0]))
             },
             "y": {
                 "mean": float(np.mean(data[:, 1])),
+                "median": float(np.median(data[:, 1])),
                 "std": float(np.std(data[:, 1])),
+                "rms": float(np.sqrt(np.mean(data[:, 1]**2))),
                 "max": float(np.max(data[:, 1])),
                 "min": float(np.min(data[:, 1]))
             },
             "z": {
                 "mean": float(np.mean(data[:, 2])),
+                "median": float(np.median(data[:, 2])),
                 "std": float(np.std(data[:, 2])),
+                "rms": float(np.sqrt(np.mean(data[:, 2]**2))),
                 "max": float(np.max(data[:, 2])),
                 "min": float(np.min(data[:, 2]))
             }
         }
+        
+        # Sample data for plotting (limit to 1000 points for performance)
+        sample_size = min(1000, len(data))
+        sample_indices = np.linspace(0, len(data)-1, sample_size, dtype=int)
+        result.vibration_stats["sampled_data"] = {
+            "x": data[sample_indices, 0].tolist(),
+            "y": data[sample_indices, 1].tolist(),
+            "z": data[sample_indices, 2].tolist(),
+            "indices": sample_indices.tolist()
+        }
+        
+        # Generate professional charts using matplotlib
+        charts = self.generate_vibration_charts(data, result.vibration_stats)
+        if charts:
+            result.vibration_stats["charts"] = charts
         
         # PERFORMANCE: For very large files, use random sampling instead of all windows
         MAX_WINDOWS = 500  # Limit to avoid long processing times

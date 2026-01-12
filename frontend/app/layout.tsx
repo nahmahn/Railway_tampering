@@ -12,6 +12,8 @@ export const metadata: Metadata = {
   description: "Official Monitoring Portal - Govt of India",
 };
 
+import { GoogleOAuthProvider } from '@react-oauth/google';
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -20,7 +22,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} antialiased`}>
-        {children}
+        <GoogleOAuthProvider clientId="741472179168-ujrglefc9vjcusv1pg0muqhqihavds12.apps.googleusercontent.com">
+          {children}
+        </GoogleOAuthProvider>
       </body>
     </html>
   );

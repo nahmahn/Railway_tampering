@@ -1,7 +1,7 @@
 [
     {
         "source_file_attributes": {
-            "filename": "CAM_FR_MAIN_TRI_NETRA_01_2025-10-14T11-42-05.320Z_28.644805_77.216721.jpeg",
+            "filename": "img001.jpeg",
             "file_format": "JPEG",
             "resolution": "1920x1080",
             "color_space": "BayerRG8"
@@ -44,7 +44,7 @@
     },
     {
         "source_file_attributes": {
-            "filename": "CAM_HANDHELD_INSP_DEVICE_03_2025-11-20T09-15-30.150Z_31.104821_77.173405.jpeg",
+            "filename": "img002.jpeg",
             "file_format": "jpeg",
             "resolution": "2400x1600",
             "color_space": "BayerRG12"
@@ -87,7 +87,7 @@
     },
     {
         "source_file_attributes": {
-            "filename": "CAM_FR_MAIN_TRI_NETRA_02_2025-12-10T09-30-15.120Z_30.9002_75.8573.jpeg",
+            "filename": "img003.jpeg",
             "file_format": "JPEG",
             "resolution": "2400x1350",
             "color_space": "BayerRG12"
@@ -130,7 +130,7 @@
     },
     {
         "source_file_attributes": {
-            "filename": "CAM_FR_MAIN_TRI_NETRA_02_2025-12-10T10-15-45.450Z_30.9055_75.861.jpeg",
+            "filename": "img004.jpeg",
             "file_format": "JPEG",
             "resolution": "2400x1350",
             "color_space": "BayerRG12"
@@ -152,7 +152,7 @@
         "geo_positioning_input": {
             "device": "Differential GPS (RTK-corrected)",
             "latitude_decimal": 30.9055,
-            "longitude_decimal": 75.861,
+            "longitude_decimal": 75.8610,
             "altitude_msl_m": 245.2,
             "satellite_count": 13,
             "hdop": 0.85
@@ -173,7 +173,7 @@
     },
     {
         "source_file_attributes": {
-            "filename": "CAM_FR_MAIN_TRI_NETRA_02_2025-12-10T10-45-20.200Z_30.9215_75.884.jpeg",
+            "filename": "img005.jpeg",
             "file_format": "JPEG",
             "resolution": "2400x1350",
             "color_space": "BayerRG12"
@@ -195,7 +195,7 @@
         "geo_positioning_input": {
             "device": "Differential GPS (RTK-corrected)",
             "latitude_decimal": 30.9215,
-            "longitude_decimal": 75.884,
+            "longitude_decimal": 75.8840,
             "altitude_msl_m": 258.5,
             "satellite_count": 10,
             "hdop": 1.2
@@ -216,7 +216,7 @@
     },
     {
         "source_file_attributes": {
-            "filename": "CAM_FR_MAIN_TRI_NETRA_02_2025-12-10T11-15-30.350Z_30.935_75.902.jpeg",
+            "filename": "img006.jpeg",
             "file_format": "JPEG",
             "resolution": "2400x1350",
             "color_space": "BayerRG12"
@@ -237,8 +237,8 @@
         },
         "geo_positioning_input": {
             "device": "Differential GPS (RTK-corrected)",
-            "latitude_decimal": 30.935,
-            "longitude_decimal": 75.902,
+            "latitude_decimal": 30.9350,
+            "longitude_decimal": 75.9020,
             "altitude_msl_m": 265.1,
             "satellite_count": 11,
             "hdop": 1.0
@@ -259,7 +259,7 @@
     },
     {
         "source_file_attributes": {
-            "filename": "CAM_CABIN_MAIN_TRI_NETRA_01_2025-12-10T11-45-10.500Z_30.951_75.924.jpeg",
+            "filename": "img007.jpeg",
             "file_format": "JPEG",
             "resolution": "2400x1350",
             "color_space": "BayerRG12",
@@ -281,8 +281,8 @@
         },
         "geo_positioning_input": {
             "device": "Differential GPS (RTK-corrected)",
-            "latitude_decimal": 30.951,
-            "longitude_decimal": 75.924,
+            "latitude_decimal": 30.9510,
+            "longitude_decimal": 75.9240,
             "altitude_msl_m": 268.0,
             "satellite_count": 14,
             "hdop": 0.9

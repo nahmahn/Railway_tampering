@@ -172,13 +172,13 @@ export default function AnalysisPage() {
             
             Please provide a comprehensive analysis with the following structured sections:
             1. EXECUTIVE SUMMARY: A high-level overview of the detection.
-            2. TECHNICAL FAULT CHARACTERISTICS: Observations from the visual spectrum analysis (fracture patterns, obstacle dimensions, etc.).
+            2. TECHNICAL FAULT CHARACTERISTICS: Observations from the visual spectrum analysis.
             3. RISK ASSESSMENT: Potential impact on train operations, track stability, and passenger safety.
-            4. REMEDIAL ACTION PLAN: Immediate engineering steps (e.g., speed restrictions, weld repair, obstacle removal).
+            4. REMEDIAL ACTION PLAN: Immediate engineering steps (e.g., speed restrictions, weld repair).
             5. PREVENTATIVE RECOMMENDATIONS: Future measures to avoid recurrence.
             
-            Use professional railway engineering terminology. Surround headers with **.
-            Total word count: 400-500 words (to fit perfectly on 2 pages).
+            Use professional railway engineering terminology. 
+            Total word count: 500-600 words.
         `;
 
         const loadImage = (url: string): Promise<string> => {
@@ -194,7 +194,12 @@ export default function AnalysisPage() {
                     resolve(canvas.toDataURL('image/png'));
                 };
                 img.onerror = () => resolve('');
-                img.src = url;
+                // If url refers to a local file or relative path that might fail, handle it
+                if (url.startsWith('/')) {
+                    img.src = window.location.origin + url;
+                } else {
+                    img.src = url;
+                }
             });
         };
 
@@ -203,132 +208,276 @@ export default function AnalysisPage() {
             const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.getWidth();
             const pageHeight = doc.internal.pageSize.getHeight();
-            const margin = 20;
+            const margin = 15;
             const contentWidth = pageWidth - (margin * 2);
             let yPos = 15;
 
-            // 1. Pre-load Assets
-            const irLogoData = await loadImage('/mock-images/Indian_Railways_Vector_Logo.png');
-            const goiLogoData = await loadImage('/mock-images/Government_of_India_logo.svg');
-            const incidentImageData = await loadImage(selectedAlert.img);
-
-            // 2. High-End Official Header
-            if (goiLogoData) {
-                doc.addImage(goiLogoData, 'PNG', (pageWidth / 2) - 12, yPos, 24, 18);
-                yPos += 22;
-            }
-
-            doc.setFontSize(10);
-            doc.setFont("helvetica", "bold");
-            doc.setTextColor(60, 60, 60);
-            doc.text("GOVERNMENT OF INDIA", pageWidth / 2, yPos, { align: "center" });
-            yPos += 6;
-            doc.setFontSize(14);
-            doc.setTextColor(0, 31, 63);
-            doc.text("MINISTRY OF RAILWAYS", pageWidth / 2, yPos, { align: "center" });
-
-            yPos += 4;
-            doc.setDrawColor(0, 31, 63);
-            doc.setLineWidth(0.8);
-            doc.line(margin, yPos, pageWidth - margin, yPos);
-            yPos += 8;
-
-            // 3. Metadata Header (Horizontal Bar)
-            doc.setFillColor(0, 31, 63);
-            doc.rect(margin, yPos, contentWidth, 12, 'F');
-            doc.setTextColor(255, 255, 255);
-            doc.setFontSize(9);
-            doc.setFont("helvetica", "bold");
-            doc.text(`INCIDENT REPORT: #INC-2026-${selectedAlert.id}`, margin + 5, yPos + 8);
-            doc.text(`SEVERITY: ${selectedAlert.severity.toUpperCase()}`, pageWidth / 2, yPos + 8, { align: 'center' });
-            doc.text(`DATE: ${new Date().toLocaleDateString()}`, pageWidth - margin - 5, yPos + 8, { align: 'right' });
-
-            yPos += 22;
-
-            // 4. Primary Evidence Image (Large & Professional)
-            if (incidentImageData) {
-                doc.setTextColor(0);
-                doc.setFontSize(11);
-                doc.text("EXHIBIT I: PRIMARY SITE VISUAL", margin, yPos);
-                yPos += 5;
-                doc.addImage(incidentImageData, 'JPEG', margin, yPos, contentWidth, 70);
-
-                // Caption
-                doc.setFillColor(245, 245, 245);
-                doc.rect(margin, yPos + 70, contentWidth, 8, 'F');
-                doc.setFontSize(8);
-                doc.setFont("helvetica", "italic");
-                doc.setTextColor(100);
-                doc.text(`Location: ${selectedAlert.location} | Confidence Score: ${selectedAlert.score}% | Sensor: RSOD-Drone-V3`, margin + 5, yPos + 75);
-
-                yPos += 90;
-            }
-
-            // 5. Technical Analysis Sections
-            doc.setTextColor(0);
-            doc.setFontSize(12);
-            doc.setFont("helvetica", "bold");
-            doc.text("TECHNICAL EVALUATION & REMEDIAL ACTIONS", margin, yPos);
-            yPos += 10;
-
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(10.5);
-            doc.setTextColor(30);
-
-            const lines = doc.splitTextToSize(reportText?.replace(/\*\*/g, '') || "Technical data extraction failed.", contentWidth);
-
-            lines.forEach((line: string) => {
-                if (yPos > pageHeight - 30) {
-                    // Page limit check
-                    if (doc.internal.pages.length >= 3) return; // jsPDF pages are 1-indexed for first page, plus current
-
+            // --- 0. Helper: Check Page & Add New ---
+            const checkPageBreak = (neededSpace: number) => {
+                if (yPos + neededSpace > pageHeight - margin) {
                     doc.addPage();
-                    yPos = 25;
-                    // Mini header for second page
+                    yPos = 20;
+                    // Header on new page
                     doc.setFontSize(8);
                     doc.setTextColor(150);
-                    doc.text(`Safety Report #INC-2026-${selectedAlert.id}`, margin, 15);
-                    doc.text("Page 2 of 2", pageWidth - margin, 15, { align: 'right' });
-
-                    doc.setTextColor(30);
-                    doc.setFontSize(10.5);
-                    doc.setFont("helvetica", "normal");
+                    doc.text(`Technical Incident Report: #INC-2026-${selectedAlert.id} (Continued)`, margin, 10);
+                    doc.text(`Page ${doc.internal.pages.length - 1}`, pageWidth - margin, 10, { align: 'right' });
                 }
-                doc.text(line, margin, yPos);
+            };
+
+            // --- 1. Load Assets ---
+            const irLogoData = await loadImage('/mock-images/Indian_Railways_Vector_Logo.png');
+            const goiLogoData = await loadImage('/mock-images/Government_of_India_logo.svg');
+            let incidentImageData = "";
+            if (selectedAlert.img && !selectedAlert.img.includes('.csv') && selectedAlert.img !== 'csv_file') {
+                incidentImageData = await loadImage(selectedAlert.img);
+            }
+
+            // Get Backend Charts (already base64)
+            const timeSeriesChart = selectedAlert.rawResult?.result?.expert_results?.structural?.vibration_analysis?.statistics?.charts?.time_series;
+            const heatmapChart = selectedAlert.rawResult?.result?.expert_results?.structural?.vibration_analysis?.statistics?.charts?.heatmap;
+
+            // --- 2. Header ---
+            // Govt Logo (Center Top)
+            if (goiLogoData) {
+                const logoW = 20;
+                const logoH = 15;
+                doc.addImage(goiLogoData, 'PNG', (pageWidth / 2) - (logoW / 2), yPos, logoW, logoH);
+                yPos += 18;
+            }
+
+            doc.setFontSize(14);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(0, 51, 102); // Navy Blue
+            doc.text("INDIAN RAILWAYS - NORTHERN REGION", pageWidth / 2, yPos, { align: "center" });
+            yPos += 7;
+            doc.setFontSize(10);
+            doc.setTextColor(60);
+            doc.text("OFFICE OF THE CHIEF SAFETY OFFICER", pageWidth / 2, yPos, { align: "center" });
+            yPos += 10;
+
+            doc.setDrawColor(0, 51, 102);
+            doc.setLineWidth(1.0);
+            doc.line(margin, yPos, pageWidth - margin, yPos);
+            yPos += 5;
+
+            // --- 3. Incident Metadata Box ---
+            doc.setFillColor(245, 247, 250);
+            doc.rect(margin, yPos, contentWidth, 25, 'F');
+            doc.setDrawColor(200);
+            doc.rect(margin, yPos, contentWidth, 25, 'S');
+
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(11);
+            doc.setTextColor(0);
+            doc.text(`INCIDENT REPORT: #INC-${selectedAlert.id}`, margin + 5, yPos + 8);
+
+            doc.setFontSize(9);
+            doc.setFont("helvetica", "normal");
+            doc.text(`Date/Time: ${new Date().toLocaleString()}`, margin + 5, yPos + 18);
+
+            doc.setFont("helvetica", "bold");
+            doc.text(`Severity:`, margin + 80, yPos + 8);
+            doc.setTextColor(selectedAlert.severity === 'Critical' ? 200 : 0, 0, 0); // Red if Critical
+            doc.text(selectedAlert.severity.toUpperCase(), margin + 98, yPos + 8);
+
+            doc.setTextColor(0);
+            doc.text(`Location:`, margin + 80, yPos + 18);
+            doc.setFont("helvetica", "normal");
+            doc.text(selectedAlert.location, margin + 98, yPos + 18);
+
+            yPos += 35;
+
+            // --- 4. Executive Summary & Analysis (Structured Parsing) ---
+            // Parse the AI response into sections based on headers like "1. EXECUTIVE SUMMARY"
+            const sections = [
+                { title: "1. EXECUTIVE SUMMARY & ASSESSMENT", content: "" },
+                { title: "2. TECHNICAL FAULT CHARACTERISTICS", content: "" },
+                { title: "3. RISK ASSESSMENT", content: "" },
+                { title: "4. REMEDIAL ACTION PLAN", content: "" },
+                { title: "5. PREVENTATIVE RECOMMENDATIONS", content: "" }
+            ];
+
+            // Normalize text: remove markdown bold/headers to avoid artifacts, normalize newlines
+            let cleanRawText = (reportText || "")
+                .replace(/\*\*/g, "")
+                .replace(/##/g, "")
+                .replace(/\r\n/g, "\n");
+
+            // Simple parser: split by title keywords
+            // We'll iterate and find the text between titles
+            let remainingText = cleanRawText;
+
+            // Extract content for each section
+            for (let i = 0; i < sections.length; i++) {
+                const currentTitle = sections[i].title.split(':')[0]; // e.g., "1. EXECUTIVE SUMMARY"
+                const nextTitle = sections[i + 1]?.title.split(':')[0];
+
+                // Find start index search ignoring case/exact format
+                // We typically expect the AI to generate "1. EXECUTIVE SUMMARY: text..."
+                // But sometimes it puts the title on its own line.
+                // We'll just take chunks sequentially if regex matches fail, or rely on the prompt structure.
+
+                // Robust fallback approach: The prompt is very specific. 
+                // Let's assume the AI produced the sections in order.
+                // We will rely on finding the Section Headers in the text.
+
+                const headerRegex = new RegExp(`${i + 1}\\.\\s*[A-Z ]+(:|\\n)`, 'i');
+                const match = remainingText.match(headerRegex);
+
+                if (match && match.index !== undefined) {
+                    // Content starts after this header
+                    let contentStart = match.index + match[0].length;
+
+                    // Start searching for NEXT header from here
+                    let contentEnd = remainingText.length;
+                    if (nextTitle) {
+                        const nextHeaderRegex = new RegExp(`${i + 2}\\.\\s*[A-Z ]+(:|\\n)`, 'i');
+                        const nextMatch = remainingText.slice(contentStart).match(nextHeaderRegex);
+                        if (nextMatch && nextMatch.index !== undefined) {
+                            contentEnd = contentStart + nextMatch.index;
+                        }
+                    }
+
+                    let sectionContent = remainingText.slice(contentStart, contentEnd).trim();
+                    sections[i].content = sectionContent;
+
+                    // Don't consume text, as we sliced from the original or logical start? 
+                    // Actually easier to just regex match all.
+                }
+            }
+
+            // Fallback: If parsing failed (empty sections), just dump the text in the first section
+            if (!sections.some(s => s.content.length > 10)) {
+                sections[0].content = cleanRawText;
+            }
+
+            // Render Sections
+            sections.forEach(section => {
+                if (!section.content) return;
+
+                checkPageBreak(25);
+
+                // Section Title (Bold, Colored)
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(12);
+                doc.setTextColor(0, 51, 102);
+                doc.text(section.title.split(':')[0], margin, yPos); // Print just "1. EXECUTIVE SUMMARY"
                 yPos += 7;
+
+                // Section Body (Normal, Black)
+                doc.setFont("helvetica", "normal");
+                doc.setFontSize(10);
+                doc.setTextColor(40);
+
+                const bodyLines = doc.splitTextToSize(section.content, contentWidth);
+                bodyLines.forEach((line: string) => {
+                    checkPageBreak(5);
+                    doc.text(line, margin, yPos);
+                    yPos += 5;
+                });
+                yPos += 8; // Spacing after section
             });
 
-            // 6. Signature & Footer (Always on bottom of whatever page it is)
-            if (yPos > pageHeight - 45) {
-                // If not enough space, just push to bottom of current or last page
-                yPos = pageHeight - 45;
-            } else {
-                yPos = pageHeight - 45;
+            // --- 5. Vibration Analysis Charts (If Available) ---
+            if (timeSeriesChart || heatmapChart) {
+                checkPageBreak(130); // Check largely if we have space for at least one chart + header
+
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(12);
+                doc.setTextColor(0, 51, 102);
+                doc.text("2. VIBRATION SIGNAL ANALYSIS", margin, yPos);
+                yPos += 8;
+
+                if (timeSeriesChart) {
+                    checkPageBreak(70);
+                    doc.addImage(`data:image/png;base64,${timeSeriesChart}`, 'PNG', margin, yPos, contentWidth, 60);
+                    doc.setFontSize(8);
+                    doc.setTextColor(100);
+                    doc.text("Fig 1: 3-Axis Vibration Acceleration Time Series", margin, yPos + 65);
+                    yPos += 75;
+                }
+
+                if (heatmapChart) {
+                    checkPageBreak(50);
+                    doc.addImage(`data:image/png;base64,${heatmapChart}`, 'PNG', margin, yPos, contentWidth, 30);
+                    doc.setFontSize(8);
+                    doc.setTextColor(100);
+                    doc.text("Fig 2: Vibration Intensity Heatmap (Spectral Density)", margin, yPos + 35);
+                    yPos += 45;
+                }
             }
 
-            doc.setDrawColor(200);
-            doc.setLineWidth(0.2);
-            doc.line(margin, yPos, pageWidth - margin, yPos);
+            // --- 6. Remedial Action Plan (Table) ---
+            const actions = selectedAlert.rawResult?.result?.action_report?.recommended_actions;
+            if (actions && actions.length > 0) {
+                checkPageBreak(60);
 
-            yPos += 10;
-            // IR Logo at bottom
-            if (irLogoData) {
-                doc.addImage(irLogoData, 'PNG', margin, yPos, 15, 15);
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(12);
+                doc.setTextColor(0, 51, 102);
+                doc.text("3. REMEDIAL ACTION PLAN", margin, yPos);
+                yPos += 8;
+
+                // Table Header
+                doc.setFillColor(240, 240, 240);
+                doc.rect(margin, yPos, contentWidth, 8, 'F');
+                doc.setFontSize(9);
+                doc.setTextColor(0);
+                doc.text("Action Item", margin + 2, yPos + 6);
+                doc.text("Urgency", margin + 90, yPos + 6);
+                doc.text("Owner", margin + 120, yPos + 6);
+                yPos += 10;
+
+                // Table Rows
+                doc.setFont("helvetica", "normal");
+                actions.forEach((action: any, i: number) => {
+                    checkPageBreak(15);
+                    const actionText = doc.splitTextToSize(action.action, 85);
+                    const rowHeight = Math.max(actionText.length * 4 + 4, 10);
+
+                    // Stripe background
+                    if (i % 2 === 1) {
+                        doc.setFillColor(252, 252, 252);
+                        doc.rect(margin, yPos - 1, contentWidth, rowHeight, 'F');
+                    }
+
+                    doc.text(actionText, margin + 2, yPos + 3);
+
+                    // Urgency Badge-like text
+                    doc.setFont("helvetica", "bold");
+                    const urgency = action.urgency || "ASAP";
+                    if (urgency.includes("T+0")) doc.setTextColor(200, 0, 0);
+                    else doc.setTextColor(0);
+                    doc.text(urgency, margin + 90, yPos + 3);
+
+                    doc.setTextColor(0);
+                    doc.setFont("helvetica", "normal");
+                    doc.text(action.owner || "Engineering", margin + 120, yPos + 3);
+
+                    yPos += rowHeight;
+                });
+                yPos += 10;
             }
 
+            // --- 7. Signature / Footer ---
+            checkPageBreak(30);
+            doc.setDrawColor(150);
+            doc.setLineWidth(0.5);
+            doc.line(margin, yPos, pageWidth / 2, yPos);
+            yPos += 5;
             doc.setFontSize(8);
             doc.setFont("helvetica", "bold");
-            doc.setTextColor(0);
-            doc.text("AUTHORIZED BY:", margin + 20, yPos + 5);
+            doc.text("SYSTEM GENERATED REPORT", margin, yPos);
             doc.setFont("helvetica", "normal");
-            doc.text("CHIEF SAFETY OFFICER (NORTHERN RAILWAYS)", margin + 20, yPos + 9);
-            doc.text("E-Verified via RSOD Protocol", margin + 20, yPos + 13);
+            doc.text("Automated Railway Safety Oversight Drone (RSOD) System", margin, yPos + 4);
+            doc.text("This document is electronically verified.", margin, yPos + 8);
 
-            doc.save(`IR_Detailed_Report_INC2026_${selectedAlert.id}.pdf`);
+            doc.save(`IR_Safety_Report_${selectedAlert.id}.pdf`);
 
         } catch (e) {
             console.error(e);
-            alert("Error generating detailed report.");
+            alert("Error generating report: " + e);
         }
         setGenerating(false);
     };
@@ -407,141 +556,376 @@ export default function AnalysisPage() {
                         </div>
                     </div>
 
-                    {/* Detail Content */}
-                    <div className="p-6 grid grid-cols-2 gap-8">
-                        <div className="space-y-4">
-                            <div className="relative rounded-lg overflow-hidden border border-gray-300 group bg-gray-100 flex items-center justify-center min-h-[200px]">
-                                {/* Check if it's a CSV file or no image available */}
-                                {(!selectedAlert.img || selectedAlert.img.includes('.csv') || selectedAlert.img === 'csv_file') ? (
-                                    <div className="p-8 text-center">
-                                        <FileText size={48} className="text-blue-500 mx-auto mb-2" />
-                                        <p className="text-sm font-medium text-gray-700">Vibration Data Analysis</p>
-                                        {selectedAlert.img && selectedAlert.img !== 'csv_file' && (
-                                            <p className="font-mono text-xs text-gray-400 mt-1">{selectedAlert.img.split('/').pop()}</p>
+                    {/* Detail Content - Enhanced with full data display */}
+                    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-300px)]">
+                        {/* Top Grid: Media + Summary */}
+                        <div className="grid grid-cols-2 gap-6">
+                            {/* Left: Media Display */}
+                            <div className="space-y-4">
+                                <div className="relative rounded-lg overflow-hidden border border-gray-300 group bg-gray-100 flex items-center justify-center min-h-[200px]">
+                                    {(!selectedAlert.img || selectedAlert.img.includes('.csv') || selectedAlert.img === 'csv_file') ? (
+                                        <div className="p-8 text-center">
+                                            <FileText size={48} className="text-blue-500 mx-auto mb-2" />
+                                            <p className="text-sm font-medium text-gray-700">Vibration Data Analysis</p>
+                                            {selectedAlert.img && selectedAlert.img !== 'csv_file' && (
+                                                <p className="font-mono text-xs text-gray-400 mt-1">{selectedAlert.img.split('/').pop()}</p>
+                                            )}
+                                            <p className="text-xs text-gray-500 mt-2">Structural analysis complete</p>
+                                            <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded backdrop-blur">
+                                                Confidence: {selectedAlert.score}%
+                                            </div>
+                                        </div>
+                                    ) : selectedAlert.isVideo ? (
+                                        <div className="relative">
+                                            <video src={selectedAlert.img} controls autoPlay muted loop className="w-full h-auto max-h-[400px] object-contain rounded">
+                                                Your browser does not support the video tag.
+                                            </video>
+                                            <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded backdrop-blur">
+                                                Confidence: {selectedAlert.score}%
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="relative">
+                                            <Image src={selectedAlert.img} alt="Evidence" width={500} height={300} className="w-full h-auto object-cover" unoptimized />
+                                            <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded backdrop-blur">
+                                                Confidence: {selectedAlert.score}%
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="bg-gray-50 p-3 rounded">
+                                        <p className="text-xs text-gray-500">Detection Model</p>
+                                        <p className="font-mono font-bold text-xs text-gray-700">Multi-Modal Fusion</p>
+                                    </div>
+                                    <div className="bg-gray-50 p-3 rounded">
+                                        <p className="text-xs text-gray-500">Processing Time</p>
+                                        <p className="font-mono font-bold text-xs text-gray-700">~2.5s</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Right: Analysis Summary */}
+                            <div className="space-y-4">
+                                <div>
+                                    <h4 className="font-bold text-gray-800 mb-2">AI Analysis</h4>
+                                    <p className="text-sm text-gray-600 leading-relaxed">
+                                        {selectedAlert.rawResult?.result?.expert_results?.structural ? (
+                                            <>Structural vibration analysis detected a <strong>{selectedAlert.type}</strong> at {selectedAlert.location}.
+                                                {selectedAlert.rawResult.result.expert_results.structural.vibration_analysis?.failure_ratio > 0 &&
+                                                    ` ${(selectedAlert.rawResult.result.expert_results.structural.vibration_analysis.failure_ratio * 100).toFixed(1)}% of analyzed windows show failure patterns.`}
+                                            </>
+                                        ) : (
+                                            <>The system detected a potential <strong>{selectedAlert.type}</strong> at {selectedAlert.location}.
+                                                Visual spectrum analysis indicates structural anomaly consistent with {selectedAlert.type.toLowerCase()}.</>
                                         )}
-                                        <p className="text-xs text-gray-500 mt-2">Structural analysis complete</p>
-                                        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded backdrop-blur">
-                                            Confidence: {selectedAlert.score}%
-                                        </div>
-                                    </div>
-                                ) : selectedAlert.isVideo ? (
-                                    /* Video player for video files */
-                                    <div className="relative">
-                                        <video
-                                            src={selectedAlert.img}
-                                            controls
-                                            autoPlay
-                                            muted
-                                            loop
-                                            className="w-full h-auto max-h-[400px] object-contain rounded"
-                                        >
-                                            Your browser does not support the video tag.
-                                        </video>
-                                        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded backdrop-blur">
-                                            Confidence: {selectedAlert.score}%
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="relative">
-                                        <Image
-                                            src={selectedAlert.img}
-                                            alt="Evidence"
-                                            width={500}
-                                            height={300}
-                                            className="w-full h-auto object-cover"
-                                            unoptimized
-                                        />
-                                        {/* Bounding boxes are now drawn in the backend-saved annotated image */}
-                                        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded backdrop-blur">
-                                            Confidence: {selectedAlert.score}%
+                                        {' '}Immediate inspection recommended.
+                                    </p>
+                                </div>
+
+                                {/* Detection List */}
+                                {selectedAlert.detections && selectedAlert.detections.length > 0 && (
+                                    <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                                        <h5 className="font-bold text-xs text-gray-700 mb-2">Detected Objects ({selectedAlert.detections.length})</h5>
+                                        <div className="space-y-1 max-h-[100px] overflow-y-auto">
+                                            {selectedAlert.detections.slice(0, 5).map((det: any, idx: number) => (
+                                                <div key={idx} className="flex items-center justify-between text-xs">
+                                                    <span className="flex items-center gap-2">
+                                                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: det.type === 'person' ? '#ef4444' : det.type === 'foreign_object' ? '#f97316' : '#3b82f6' }} />
+                                                        {det.label || det.type}
+                                                    </span>
+                                                    <span className="text-gray-500">{Math.round(det.confidence * 100)}%</span>
+                                                </div>
+                                            ))}
+                                            {selectedAlert.detections.length > 5 && <p className="text-xs text-gray-400">+{selectedAlert.detections.length - 5} more...</p>}
                                         </div>
                                     </div>
                                 )}
-                            </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-gray-50 p-3 rounded">
-                                    <p className="text-xs text-gray-500">Detection Model</p>
-                                    <p className="font-mono font-bold text-xs text-gray-700">Multi-Modal Fusion</p>
-                                </div>
-                                <div className="bg-gray-50 p-3 rounded">
-                                    <p className="text-xs text-gray-500">Processing Time</p>
-                                    <p className="font-mono font-bold text-xs text-gray-700">~2.5s</p>
-                                </div>
-                            </div>
-                        </div>
+                                {/* Structural Alerts */}
+                                {selectedAlert.rawResult?.result?.expert_results?.structural?.alerts && (
+                                    <div className="bg-red-50 p-3 rounded border border-red-200">
+                                        <h5 className="font-bold text-xs text-red-800 mb-2">Structural Alerts</h5>
+                                        <ul className="text-xs text-red-700 space-y-1">
+                                            {selectedAlert.rawResult.result.expert_results.structural.alerts.map((alert: string, idx: number) => (
+                                                <li key={idx}>{alert}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
 
-                        <div className="space-y-4">
-                            <div>
-                                <h4 className="font-bold text-gray-800 mb-2">AI Analysis</h4>
-                                <p className="text-sm text-gray-600 leading-relaxed">
-                                    The system detected a potential <strong>{selectedAlert.type}</strong> at {selectedAlert.location}.
-                                    Visual spectrum analysis indicates structural anomaly consistent with {selectedAlert.type.toLowerCase()}.
-                                    Immediate inspection recommended.
-                                </p>
-                            </div>
+                                {/* Visual Alerts */}
+                                {selectedAlert.rawResult?.result?.expert_results?.visual?.alerts && (
+                                    <div className="bg-red-50 p-3 rounded border border-red-200">
+                                        <h5 className="font-bold text-xs text-red-800 mb-2">Visual Alerts</h5>
+                                        <ul className="text-xs text-red-700 space-y-1">
+                                            {selectedAlert.rawResult.result.expert_results.visual.alerts.map((alert: string, idx: number) => (
+                                                <li key={idx}>{alert}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
 
-                            {/* Detection List */}
-                            {selectedAlert.detections && selectedAlert.detections.length > 0 && (
-                                <div className="bg-gray-50 p-3 rounded border border-gray-200">
-                                    <h5 className="font-bold text-xs text-gray-700 mb-2">🔍 Detected Objects ({selectedAlert.detections.length})</h5>
-                                    <div className="space-y-1 max-h-[100px] overflow-y-auto">
-                                        {selectedAlert.detections.slice(0, 5).map((det: any, idx: number) => (
-                                            <div key={idx} className="flex items-center justify-between text-xs">
-                                                <span className="flex items-center gap-2">
-                                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: det.type === 'person' ? '#ef4444' : det.type === 'foreign_object' ? '#f97316' : '#3b82f6' }} />
-                                                    {det.label || det.type}
-                                                </span>
-                                                <span className="text-gray-500">{Math.round(det.confidence * 100)}%</span>
-                                            </div>
-                                        ))}
-                                        {selectedAlert.detections.length > 5 && <p className="text-xs text-gray-400">+{selectedAlert.detections.length - 5} more...</p>}
+                                {/* Risk Level Badge */}
+                                <div className={`p-3 rounded border ${selectedAlert.severity === 'Critical' ? 'bg-red-100 border-red-300' : selectedAlert.severity === 'High' ? 'bg-orange-100 border-orange-300' : 'bg-gray-100 border-gray-300'}`}>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-medium text-gray-700">Risk Level</span>
+                                        <span className={`text-xs font-bold px-2 py-1 rounded ${selectedAlert.severity === 'Critical' ? 'bg-red-500 text-white' : selectedAlert.severity === 'High' ? 'bg-orange-500 text-white' : 'bg-gray-500 text-white'}`}>
+                                            {selectedAlert.severity}
+                                        </span>
                                     </div>
                                 </div>
-                            )}
-
-                            {/* Recommendations */}
-                            {selectedAlert.rawResult?.result?.expert_results?.visual?.recommendations && (
-                                <div className="bg-yellow-50 p-3 rounded border border-yellow-200">
-                                    <h5 className="font-bold text-xs text-yellow-800 mb-2">⚠️ Actions Required</h5>
-                                    <ul className="text-xs text-yellow-700 space-y-1">
-                                        {selectedAlert.rawResult.result.expert_results.visual.recommendations.slice(0, 4).map((rec: string, idx: number) => (
-                                            <li key={idx}>• {rec}</li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-
-                            {/* Alerts */}
-                            {selectedAlert.rawResult?.result?.expert_results?.visual?.alerts && (
-                                <div className="bg-red-50 p-3 rounded border border-red-200">
-                                    <h5 className="font-bold text-xs text-red-800 mb-2">🚨 System Alerts</h5>
-                                    <ul className="text-xs text-red-700 space-y-1">
-                                        {selectedAlert.rawResult.result.expert_results.visual.alerts.map((alert: string, idx: number) => (
-                                            <li key={idx}>{alert}</li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-
-                            {/* Risk Level Badge */}
-                            <div className={`p-3 rounded border ${selectedAlert.severity === 'Critical' ? 'bg-red-100 border-red-300' : selectedAlert.severity === 'High' ? 'bg-orange-100 border-orange-300' : 'bg-gray-100 border-gray-300'}`}>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-xs font-medium text-gray-700">Risk Level</span>
-                                    <span className={`text-xs font-bold px-2 py-1 rounded ${selectedAlert.severity === 'Critical' ? 'bg-red-500 text-white' : selectedAlert.severity === 'High' ? 'bg-orange-500 text-white' : 'bg-gray-500 text-white'}`}>
-                                        {selectedAlert.severity}
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div className="bg-gray-50 p-3 rounded border border-gray-200 flex items-center gap-3">
-                                <div className="w-4 h-4 rounded-full border-2 border-dashed border-gray-400"></div>
-                                <div>
-                                    <p className="text-xs font-bold text-gray-500">Officer Review</p>
-                                    <p className="text-[10px] text-gray-400">{selectedAlert.status}</p>
-                                </div>
                             </div>
                         </div>
+
+                        {/* Vibration Statistics - Only show for structural data */}
+                        {selectedAlert.rawResult?.result?.expert_results?.structural?.vibration_analysis?.statistics && (
+                            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
+                                <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                                    Vibration Statistics
+                                </h4>
+                                <div className="grid grid-cols-3 gap-4">
+                                    {['x', 'y', 'z'].map((axis) => {
+                                        const stats = selectedAlert.rawResult.result.expert_results.structural.vibration_analysis.statistics[axis];
+                                        return (
+                                            <div key={axis} className="bg-white p-3 rounded shadow-sm">
+                                                <h5 className="font-bold text-xs text-gray-600 mb-2 uppercase">{axis}-Axis</h5>
+                                                <div className="space-y-1 text-xs">
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-500">Mean:</span>
+                                                        <span className="font-mono font-bold">{stats.mean?.toFixed(3) || 'N/A'}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-500">Median:</span>
+                                                        <span className="font-mono font-bold">{stats.median?.toFixed(3) || 'N/A'}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-500">RMS:</span>
+                                                        <span className="font-mono font-bold">{stats.rms?.toFixed(3) || 'N/A'}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-500">Std Dev:</span>
+                                                        <span className="font-mono font-bold">{stats.std?.toFixed(3) || 'N/A'}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-500">Range:</span>
+                                                        <span className="font-mono font-bold text-xs">[{stats.min?.toFixed(1)}, {stats.max?.toFixed(1)}]</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Vibration Plots - Matplotlib generated images */}
+                        {selectedAlert.rawResult?.result?.expert_results?.structural?.vibration_analysis?.statistics?.charts?.time_series && (
+                            <div className="bg-white p-4 rounded-lg border border-gray-200">
+                                <h4 className="font-bold text-gray-800 mb-3">Vibration Time Series</h4>
+                                <img
+                                    src={`data:image/png;base64,${selectedAlert.rawResult.result.expert_results.structural.vibration_analysis.statistics.charts.time_series}`}
+                                    alt="Vibration Time Series"
+                                    className="w-full h-auto rounded"
+                                />
+                            </div>
+                        )}
+
+                        {/* Vibration Plots - Simple SVG-based charts (Fallback) */}
+                        {!selectedAlert.rawResult?.result?.expert_results?.structural?.vibration_analysis?.statistics?.charts?.time_series && selectedAlert.rawResult?.result?.expert_results?.structural?.vibration_analysis?.statistics?.sampled_data && (
+                            <div className="bg-white p-4 rounded-lg border border-gray-200">
+                                <h4 className="font-bold text-gray-800 mb-3">Vibration Time Series</h4>
+                                <div className="space-y-4">
+                                    {['x', 'y', 'z'].map((axis) => {
+                                        const sampledData = selectedAlert.rawResult.result.expert_results.structural.vibration_analysis.statistics.sampled_data;
+                                        const data = sampledData[axis] || [];
+                                        const stats = selectedAlert.rawResult.result.expert_results.structural.vibration_analysis.statistics[axis];
+
+                                        if (!data.length) return null;
+
+                                        const max = Math.max(...data);
+                                        const min = Math.min(...data);
+                                        const range = max - min || 1;
+                                        const width = 600;
+                                        const height = 80;
+                                        const padding = 10;
+
+                                        const points = data.map((val: number, idx: number) => {
+                                            const x = padding + (idx / (data.length - 1)) * (width - 2 * padding);
+                                            const y = height - padding - ((val - min) / range) * (height - 2 * padding);
+                                            return `${x},${y}`;
+                                        }).join(' ');
+
+                                        return (
+                                            <div key={axis} className="border border-gray-200 rounded p-2">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <span className="text-xs font-bold text-gray-700 uppercase">{axis}-Axis</span>
+                                                    <div className="flex gap-3 text-xs">
+                                                        <span className="text-blue-600">Mean: {stats.mean?.toFixed(2)}</span>
+                                                        <span className="text-green-600">Median: {stats.median?.toFixed(2)}</span>
+                                                        <span className="text-purple-600">RMS: {stats.rms?.toFixed(2)}</span>
+                                                    </div>
+                                                </div>
+                                                <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className="bg-gray-50 rounded">
+                                                    <polyline points={points} fill="none" stroke="#3b82f6" strokeWidth="1.5" />
+                                                    <line x1={padding} y1={height - padding - ((stats.mean - min) / range) * (height - 2 * padding)}
+                                                        x2={width - padding} y2={height - padding - ((stats.mean - min) / range) * (height - 2 * padding)}
+                                                        stroke="#3b82f6" strokeWidth="1" strokeDasharray="4,4" opacity="0.5" />
+                                                </svg>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+
+                        {/* Heatmap Visualization */}
+                        {selectedAlert.rawResult?.result?.expert_results?.structural?.vibration_analysis?.statistics?.charts?.heatmap ? (
+                            <div className="bg-white p-4 rounded-lg border border-gray-200">
+                                <h4 className="font-bold text-gray-800 mb-3">Vibration Heatmap (3-Axis)</h4>
+                                <img
+                                    src={`data:image/png;base64,${selectedAlert.rawResult.result.expert_results.structural.vibration_analysis.statistics.charts.heatmap}`}
+                                    alt="Vibration Heatmap"
+                                    className="w-full h-auto rounded"
+                                />
+                            </div>
+                        ) : selectedAlert.rawResult?.result?.expert_results?.structural?.vibration_analysis?.statistics?.sampled_data && (
+                            <div className="bg-white p-4 rounded-lg border border-gray-200">
+                                <h4 className="font-bold text-gray-800 mb-3">Vibration Heatmap (3-Axis)</h4>
+                                <div className="overflow-x-auto">
+                                    <svg width="600" height="120" viewBox="0 0 600 120" className="bg-gray-50 rounded">
+                                        {['x', 'y', 'z'].map((axis, axisIdx) => {
+                                            const sampledData = selectedAlert.rawResult.result.expert_results.structural.vibration_analysis.statistics.sampled_data;
+                                            const data = sampledData[axis] || [];
+                                            const max = Math.max(...data);
+                                            const min = Math.min(...data);
+                                            const range = max - min || 1;
+
+                                            return data.slice(0, 100).map((val: number, idx: number) => {
+                                                const intensity = (val - min) / range;
+                                                const color = intensity > 0.7 ? '#ef4444' : intensity > 0.4 ? '#f97316' : intensity > 0.2 ? '#fbbf24' : '#3b82f6';
+                                                return (
+                                                    <rect
+                                                        key={`${axis}-${idx}`}
+                                                        x={idx * 6}
+                                                        y={axisIdx * 35 + 10}
+                                                        width="5"
+                                                        height="30"
+                                                        fill={color}
+                                                        opacity={0.7 + intensity * 0.3}
+                                                    />
+                                                );
+                                            });
+                                        })}
+                                        <text x="10" y="30" fontSize="10" fill="#666">X</text>
+                                        <text x="10" y="65" fontSize="10" fill="#666">Y</text>
+                                        <text x="10" y="100" fontSize="10" fill="#666">Z</text>
+                                    </svg>
+                                </div>
+                                <div className="flex items-center gap-2 mt-2 text-xs text-gray-600">
+                                    <span>Intensity:</span>
+                                    <div className="flex gap-1">
+                                        <div className="w-4 h-4 bg-blue-500 rounded"></div>
+                                        <span>Low</span>
+                                    </div>
+                                    <div className="flex gap-1">
+                                        <div className="w-4 h-4 bg-yellow-400 rounded"></div>
+                                        <span>Med</span>
+                                    </div>
+                                    <div className="flex gap-1">
+                                        <div className="w-4 h-4 bg-red-500 rounded"></div>
+                                        <span>High</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Action Plan Table */}
+                        {selectedAlert.rawResult?.result?.action_report?.recommended_actions && (
+                            <div className="bg-white p-4 rounded-lg border border-gray-200">
+                                <h4 className="font-bold text-gray-800 mb-3">Recommended Actions</h4>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs">
+                                        <thead className="bg-gray-100">
+                                            <tr>
+                                                <th className="text-left p-2 font-bold text-gray-700">Action</th>
+                                                <th className="text-left p-2 font-bold text-gray-700">Owner</th>
+                                                <th className="text-left p-2 font-bold text-gray-700">Urgency</th>
+                                                <th className="text-left p-2 font-bold text-gray-700">Impact</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {selectedAlert.rawResult.result.action_report.recommended_actions.map((action: any, idx: number) => (
+                                                <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
+                                                    <td className="p-2">{action.action}</td>
+                                                    <td className="p-2 font-medium text-blue-600">{action.owner}</td>
+                                                    <td className="p-2">
+                                                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${action.urgency?.includes('T+0') ? 'bg-red-100 text-red-700' :
+                                                            action.urgency?.includes('T+5') ? 'bg-orange-100 text-orange-700' :
+                                                                'bg-yellow-100 text-yellow-700'
+                                                            }`}>
+                                                            {action.urgency}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-2 text-gray-600">{action.impact}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Root Cause Analysis */}
+                        {selectedAlert.rawResult?.result?.tampering_analysis?.root_cause_analysis && (
+                            <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+                                <h4 className="font-bold text-gray-800 mb-3">Root Cause Analysis</h4>
+                                <div className="space-y-2 text-sm">
+                                    <div>
+                                        <span className="font-bold text-gray-700">Probable Cause: </span>
+                                        <span className="text-gray-600">{selectedAlert.rawResult.result.tampering_analysis.root_cause_analysis.probable_cause}</span>
+                                    </div>
+                                    {selectedAlert.rawResult.result.tampering_analysis.root_cause_analysis.contributing_factors?.length > 0 && (
+                                        <div>
+                                            <span className="font-bold text-gray-700">Contributing Factors:</span>
+                                            <ul className="list-disc list-inside text-gray-600 ml-2">
+                                                {selectedAlert.rawResult.result.tampering_analysis.root_cause_analysis.contributing_factors.map((factor: string, idx: number) => (
+                                                    <li key={idx}>{factor}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                    {selectedAlert.rawResult.result.tampering_analysis.tampering_assessment?.evidence?.length > 0 && (
+                                        <div>
+                                            <span className="font-bold text-gray-700">Evidence:</span>
+                                            <ul className="list-disc list-inside text-gray-600 ml-2">
+                                                {selectedAlert.rawResult.result.tampering_analysis.tampering_assessment.evidence.map((ev: string, idx: number) => (
+                                                    <li key={idx}>{ev}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Recommendations */}
+                        {(selectedAlert.rawResult?.result?.expert_results?.structural?.recommendations ||
+                            selectedAlert.rawResult?.result?.expert_results?.visual?.recommendations) && (
+                                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                                    <h4 className="font-bold text-yellow-800 mb-2">Expert Recommendations</h4>
+                                    <ul className="text-sm text-yellow-700 space-y-1">
+                                        {selectedAlert.rawResult.result.expert_results.structural?.recommendations?.map((rec: string, idx: number) => (
+                                            <li key={`s-${idx}`}>• {rec}</li>
+                                        ))}
+                                        {selectedAlert.rawResult.result.expert_results.visual?.recommendations?.map((rec: string, idx: number) => (
+                                            <li key={`v-${idx}`}>• {rec}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
                     </div>
                 </div>
             </div>

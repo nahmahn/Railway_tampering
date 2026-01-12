@@ -1,0 +1,30 @@
+// Add this to replace the SVG charts sections in page.tsx
+
+{/* Vibration Plots - Matplotlib generated images */}
+{selectedAlert.rawResult?.result?.expert_results?.structural?.vibration_analysis?.statistics?.charts?.time_series && (
+    <div className="bg-white p-4 rounded-lg border border-gray-200">
+        <h4 className="font-bold text-gray-800 mb-3">Vibration Time Series</h4>
+        <img 
+            src={`data:image/png;base64,${selectedAlert.rawResult.result.expert_results.structural.vibration_analysis.statistics.charts.time_series}`}
+            alt="Vibration Time Series"
+            className="w-full h-auto rounded"
+        />
+    </div>
+)}
+
+{/* Heatmap Visualization - Matplotlib generated */}
+{selectedAlert.rawResult?.result?.expert_results?.structural?.vibration_analysis?.statistics?.charts?.heatmap && (
+    <div className="bg-white p-4 rounded-lg border border-gray-200">
+        <h4 className="font-bold text-gray-800 mb-3">Vibration Heatmap (3-Axis)</h4>
+        <img 
+            src={`data:image/png;base64,${selectedAlert.rawResult.result.expert_results.structural.vibration_analysis.statistics.charts.heatmap}`}
+            alt="Vibration Heatmap"
+            className="w-full h-auto rounded"
+        />
+    </div>
+)}
+
+// Instructions:
+// 1. Find the section starting with "Vibration Plots - Simple SVG-based charts" (around line 574)
+// 2. Replace everything from that comment through the end of the heatmap section (around line 668)
+// 3. Replace with the above code
