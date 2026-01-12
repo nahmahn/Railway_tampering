@@ -27,6 +27,8 @@ Our solution is a **Meta-Model–based Mixture-of-Experts architecture** designe
 ### Data & Tools
 ![Pandas](https://img.shields.io/badge/pandas-%23150458.svg?style=for-the-badge&logo=pandas&logoColor=white)
 ![NumPy](https://img.shields.io/badge/numpy-%23013243.svg?style=for-the-badge&logo=numpy&logoColor=white)
+![Matplotlib](https://img.shields.io/badge/Matplotlib-%23ffffff.svg?style=for-the-badge&logo=Matplotlib&logoColor=black)
+![Seaborn](https://img.shields.io/badge/Seaborn-77ACF1?style=for-the-badge&logo=seaborn&logoColor=white)
 ![Git](https://img.shields.io/badge/git-%23F05033.svg?style=for-the-badge&logo=git&logoColor=white)
 
 ---
@@ -39,9 +41,12 @@ Continuous monitoring enables early detection of abnormal vibrations, structural
 ### Real-Time Alerts with Geo-Referenced Visualization
 All detections are geo-tagged and visualized on a map-based interface, highlighting impacted zones and hotspots. Alerts and notifications are pushed in real time to support rapid, localized response.
 
-### Automated Action Report Generation & Intelligent Routing
-Instead of raw alerts, the system generates structured action reports detailing the nature of the anomaly, affected locations, severity, and recommended next steps such as inspections, speed restrictions, or patrol deployment. 
-*   **Smart Rerouting**: The system provides intelligent rerouting suggestions to optimize network flow and minimize disruption during detected tampering events.
+### Automated Formal Incident Reporting
+The system generates **Professional Government-Standard PDF Reports** for every incident. These reports include:
+*   **Executive Summary & Technical Assessment**: AI-generated detailed analysis of the fault using expert terminology.
+*   **Visual Evidence & Analysis**: High-resolution charts (Time Series, Heatmaps) generated via Matplotlib/Seaborn to visualize vibration anomalies.
+*   **Remedial Action Plan**: Structured tables detailing urgency, ownership, and specific engineering steps.
+*   **Official Formatting**: Includes Government of India and Ministry of Railways branding, making reports ready for immediate official circulation.
 
 ### Multi-Sensor, Multi-Stream Intelligence
 The system seamlessly handles diverse input streams: geometric sensors, accelerometers, DAS, CCTV, drones, thermal cameras, and LiDAR without requiring uniform coverage. Each modality contributes complementary evidence, enabling reliable detection even when some sensors are unavailable.
