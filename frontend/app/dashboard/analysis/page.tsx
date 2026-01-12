@@ -37,6 +37,7 @@ export default function AnalysisPage() {
             let score = 0;
             let severity = "Low";
             let isCsvFile = false;
+            let isVideo = false; // Track if media is video
             let detections: any[] = []; // For bounding box overlay
 
             // Extract info from result - check expert_results structure
@@ -49,11 +50,23 @@ export default function AnalysisPage() {
                 // Try to get image URL from visual result - prefer annotated image
                 if (visual) {
                     const visItem = Array.isArray(visual) ? visual[0] : visual;
-                    // Use annotated image if available (has bounding boxes drawn)
-                    if (visItem && visItem.annotated_image_url) {
-                        imageUrl = api.getUploadUrl(visItem.annotated_image_url);
-                    } else if (visItem && visItem.file_url) {
-                        imageUrl = api.getUploadUrl(visItem.file_url);
+
+                    // Check if this is a video file
+                    if (visItem?.file_type === 'video') {
+                        isVideo = true;
+                        // For videos, prefer annotated version if available
+                        if (visItem.annotated_image_url) {
+                            imageUrl = api.getUploadUrl(visItem.annotated_image_url);
+                        } else if (visItem.file_url) {
+                            imageUrl = api.getUploadUrl(visItem.file_url);
+                        }
+                    } else {
+                        // Use annotated image if available (has bounding boxes drawn)
+                        if (visItem && visItem.annotated_image_url) {
+                            imageUrl = api.getUploadUrl(visItem.annotated_image_url);
+                        } else if (visItem && visItem.file_url) {
+                            imageUrl = api.getUploadUrl(visItem.file_url);
+                        }
                     }
 
                     // Extract detections for bounding boxes
@@ -131,6 +144,7 @@ export default function AnalysisPage() {
                 status: "New",
                 score: score,
                 img: imageUrl,
+                isVideo: isVideo, // Track if media is video for proper rendering
                 detections: detections, // For bounding box overlay
                 rawResult: result // Store raw result for detailed view if needed
             };
@@ -406,6 +420,23 @@ export default function AnalysisPage() {
                                             <p className="font-mono text-xs text-gray-400 mt-1">{selectedAlert.img.split('/').pop()}</p>
                                         )}
                                         <p className="text-xs text-gray-500 mt-2">Structural analysis complete</p>
+                                        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded backdrop-blur">
+                                            Confidence: {selectedAlert.score}%
+                                        </div>
+                                    </div>
+                                ) : selectedAlert.isVideo ? (
+                                    /* Video player for video files */
+                                    <div className="relative">
+                                        <video
+                                            src={selectedAlert.img}
+                                            controls
+                                            autoPlay
+                                            muted
+                                            loop
+                                            className="w-full h-auto max-h-[400px] object-contain rounded"
+                                        >
+                                            Your browser does not support the video tag.
+                                        </video>
                                         <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded backdrop-blur">
                                             Confidence: {selectedAlert.score}%
                                         </div>

@@ -418,6 +418,143 @@ class VisualIntegrityExpert:
         # Return relative URL path
         return f"uploads/{annotated_filename}"
     
+    def draw_and_save_annotated_video(
+        self, 
+        video_path: str, 
+        frame_detections: Dict[int, List[Detection]],
+        sample_rate: int = 30
+    ) -> str:
+        """
+        Create an annotated video with bounding boxes drawn on frames.
+        
+        Args:
+            video_path: Path to the original video file
+            frame_detections: Dict mapping frame numbers to their detections
+            sample_rate: Sample rate used during analysis
+        
+        Returns:
+            URL path to annotated video (relative path for web)
+        """
+        if not CV2_AVAILABLE:
+            return ""
+        
+        try:
+            cap = cv2.VideoCapture(video_path)
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            
+            # Create output path
+            import os
+            base_name = os.path.basename(video_path)
+            name, ext = os.path.splitext(base_name)
+            annotated_filename = f"{name}_annotated.mp4"
+            annotated_path = os.path.join("uploads", annotated_filename)
+            os.makedirs("uploads", exist_ok=True)
+            
+            # Try different codecs for browser compatibility
+            # H.264 is most browser-compatible
+            codecs_to_try = ['avc1', 'H264', 'X264', 'mp4v']
+            out = None
+            for codec in codecs_to_try:
+                try:
+                    fourcc = cv2.VideoWriter_fourcc(*codec)
+                    out = cv2.VideoWriter(annotated_path, fourcc, fps, (width, height))
+                    if out.isOpened():
+                        print(f"Using video codec: {codec}")
+                        break
+                except:
+                    continue
+            
+            if out is None or not out.isOpened():
+                # Fallback to mp4v
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter(annotated_path, fourcc, fps, (width, height))
+            
+            # Color mapping for detection types
+            colors = {
+                DetectionType.PERSON: (0, 0, 255),      # Red
+                DetectionType.FOREIGN_OBJECT: (0, 165, 255),  # Orange
+                DetectionType.TRAIN: (255, 0, 0),       # Blue
+                DetectionType.STONE: (0, 165, 255),     # Orange
+                DetectionType.DEBRIS: (0, 165, 255),    # Orange
+                DetectionType.VEHICLE: (255, 255, 0),   # Cyan
+                DetectionType.ANIMAL: (0, 255, 255),    # Yellow
+            }
+            default_color = (0, 255, 0)  # Green
+            
+            frame_idx = 0
+            current_detections = []  # Detections to draw on current frame
+            
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                # Find the closest sampled frame's detections
+                # Use detections from the last sampled frame until we reach the next one
+                sampled_frame = (frame_idx // sample_rate) * sample_rate
+                if sampled_frame in frame_detections:
+                    current_detections = frame_detections[sampled_frame]
+                
+                # Draw detections on this frame
+                for det in current_detections:
+                    if det.bounding_box:
+                        x1, y1, x2, y2 = det.bounding_box
+                        color = colors.get(det.detection_type, default_color)
+                        
+                        # Draw bounding box
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                        
+                        # Draw label
+                        label = f"{det.label or det.detection_type.value} {int(det.confidence * 100)}%"
+                        (label_w, label_h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                        cv2.rectangle(frame, (x1, y1 - label_h - 8), (x1 + label_w + 4, y1), color, -1)
+                        cv2.putText(frame, label, (x1 + 2, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                
+                out.write(frame)
+                frame_idx += 1
+            
+            cap.release()
+            out.release()
+            
+            # Re-encode to H.264 using ffmpeg for browser compatibility
+            import subprocess
+            import shutil
+            
+            temp_output = annotated_path.replace('.mp4', '_temp.mp4')
+            shutil.move(annotated_path, temp_output)
+            
+            try:
+                # Use ffmpeg to re-encode to H.264 (libx264) with web-compatible settings
+                ffmpeg_cmd = [
+                    'ffmpeg', '-y', '-i', temp_output,
+                    '-c:v', 'libx264', '-preset', 'fast',
+                    '-crf', '23', '-pix_fmt', 'yuv420p',
+                    '-movflags', '+faststart',  # Enable streaming
+                    annotated_path
+                ]
+                result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=120)
+                if result.returncode == 0:
+                    os.remove(temp_output)  # Clean up temp file
+                    print(f"Re-encoded video to H.264: {annotated_path}")
+                else:
+                    # ffmpeg failed, use original
+                    shutil.move(temp_output, annotated_path)
+                    print(f"ffmpeg failed, using original video")
+            except Exception as ffmpeg_err:
+                # ffmpeg not available or failed, use original
+                if os.path.exists(temp_output):
+                    shutil.move(temp_output, annotated_path)
+                print(f"ffmpeg error: {ffmpeg_err}")
+            
+            return f"uploads/{annotated_filename}"
+            
+        except Exception as e:
+            print(f"Error creating annotated video: {e}")
+            return ""
+    
     def analyze_image(
         self,
         file_path: str,
@@ -570,6 +707,7 @@ class VisualIntegrityExpert:
             
             frame_idx = 0
             all_frame_detections = []
+            frame_detections_dict = {}  # Dict mapping frame number to detections for video annotation
             tampering_frames = []
             
             while cap.isOpened():
@@ -586,10 +724,20 @@ class VisualIntegrityExpert:
                     frame_result = self.analyze_image(temp_path)
                     
                     # Tag detections with frame number
+                    frame_dets = []  # Store detections for this frame
                     for det in frame_result.detections:
+                        # Skip stone detections for video files as requested
+                        # Check detection type AND label content (for "large stone" which maps to UNKNOWN)
+                        if det.detection_type == DetectionType.STONE or "stone" in (det.label or "").lower():
+                            continue
+                            
                         det.frame_number = frame_idx
                         det.timestamp = frame_idx / result.fps if result.fps > 0 else 0
                         all_frame_detections.append(det)
+                        frame_dets.append(det)
+                    
+                    # Store for video annotation
+                    frame_detections_dict[frame_idx] = frame_dets
                     
                     # Track tampering frames
                     if frame_result.person_on_track or frame_result.foreign_object_on_track:
@@ -630,6 +778,11 @@ class VisualIntegrityExpert:
             
             result.alerts = self._generate_alerts(result)
             result.recommendations = self._generate_recommendations(result)
+            
+            # Create annotated video with bounding boxes
+            result.annotated_image_url = self.draw_and_save_annotated_video(
+                file_path, frame_detections_dict, sample_rate
+            )
             
             result.analysis_status = "success"
             

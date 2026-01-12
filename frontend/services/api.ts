@@ -89,15 +89,18 @@ export const api = {
         if (!filename) return '/placeholder.png'; // Fallback
         if (filename.startsWith('http') || filename.startsWith('data:')) return filename;
 
-        // Remove leading slash if present to avoid double slashes
-        const cleanPath = filename.startsWith('/') ? filename.slice(1) : filename;
+        // Normalize Windows backslashes to forward slashes
+        let cleanPath = filename.replace(/\\/g, '/');
 
-        // If the path doesn't start with 'uploads/', assume it needs it (compatibility)
-        // Check if we need to append uploads/
-        if (!cleanPath.startsWith('uploads/')) {
-            return `${UPLOADS_BASE_URL}/uploads/${cleanPath}`;
+        // Remove leading slash if present to avoid double slashes
+        cleanPath = cleanPath.startsWith('/') ? cleanPath.slice(1) : cleanPath;
+
+        // If the path already starts with 'uploads/', don't add it again
+        if (cleanPath.startsWith('uploads/')) {
+            return `${UPLOADS_BASE_URL}/${cleanPath}`;
         }
 
-        return `${UPLOADS_BASE_URL}/${cleanPath}`;
+        // Otherwise, prepend /uploads/
+        return `${UPLOADS_BASE_URL}/uploads/${cleanPath}`;
     }
 };
