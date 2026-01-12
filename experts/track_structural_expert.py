@@ -269,6 +269,73 @@ class TrackStructuralExpert:
         
         return "unknown"
     
+    def analyze_files(
+        self,
+        file_paths: List[str],
+        metadata: Dict[str, Any] = None
+    ) -> List[TrackStructuralAnalysisResult]:
+        """
+        Analyze a list of files. Detects if they are separate axis files and merges them if needed.
+        """
+        results = []
+        
+        # Check if we have a set of x, y, z files
+        x_file = next((f for f in file_paths if 'x_axis' in f.lower() or '_x_' in f.lower()), None)
+        y_file = next((f for f in file_paths if 'y_axis' in f.lower() or '_y_' in f.lower()), None)
+        z_file = next((f for f in file_paths if 'z_axis' in f.lower() or '_z_' in f.lower()), None)
+        
+        if x_file and y_file and z_file and len(file_paths) == 3:
+            # Merge logic
+            try:
+                print(f"Detected 3-axis vibration set: {x_file}, {y_file}, {z_file}")
+                df_x = pd.read_csv(x_file)
+                df_y = pd.read_csv(y_file)
+                df_z = pd.read_csv(z_file)
+                
+                # Assume standard format: index, data
+                # Rename columns to x, y, z
+                x_col = next((c for c in df_x.columns if 'data' in c.lower() or 'x' in c.lower() if 'index' not in c.lower()), None)
+                y_col = next((c for c in df_y.columns if 'data' in c.lower() or 'y' in c.lower() if 'index' not in c.lower()), None)
+                z_col = next((c for c in df_z.columns if 'data' in c.lower() or 'z' in c.lower() if 'index' not in c.lower()), None)
+                
+                if x_col and y_col and z_col:
+                    # Merge on index if present, else by position
+                    # Assuming they are aligned by row
+                    df_combined = pd.DataFrame({
+                        'x': df_x[x_col].values,
+                        'y': df_y[y_col].values,
+                        'z': df_z[z_col].values
+                    })
+                    
+                    # Create a consolidated result
+                    # Use x_file as the primary path for reporting
+                    result = TrackStructuralAnalysisResult(
+                        file_path=x_file, 
+                        analysis_status="processing",
+                        timestamp=datetime.utcnow().isoformat() + "Z",
+                        data_type="vibration"
+                    )
+                    
+                    result.sample_count = len(df_combined)
+                    result = self._analyze_vibration_data(df_combined, result)
+                    result.analysis_status = "success"
+                    # Add notes about other files
+                    result.alerts.append(f"Merged data from X, Y, Z files")
+                    
+                    results.append(result)
+                    return results
+                    
+            except Exception as e:
+                print(f"Error merging files: {e}")
+                # Fallback to individual analysis
+                pass
+
+        # Process individually if not merged
+        for path in file_paths:
+            results.append(self.analyze_csv(path, metadata))
+            
+        return results
+
     def analyze_csv(
         self,
         file_path: str,
@@ -367,8 +434,23 @@ class TrackStructuralExpert:
             }
         }
         
-        # Create windows and extract features
-        windows = self.create_windows(data)
+        # PERFORMANCE: For very large files, use random sampling instead of all windows
+        MAX_WINDOWS = 500  # Limit to avoid long processing times
+        window_size = self.WINDOW_SIZE
+        
+        if len(data) > MAX_WINDOWS * window_size:
+            # Random sampling mode for large files
+            print(f"Large file detected ({len(data)} samples). Sampling {MAX_WINDOWS} random windows...")
+            sampled_windows = []
+            for _ in range(MAX_WINDOWS):
+                start_idx = np.random.randint(0, len(data) - window_size)
+                window = data[start_idx:start_idx + window_size]
+                features = self.extract_features(window)
+                sampled_windows.append((start_idx, start_idx + window_size, features))
+            windows = sampled_windows
+        else:
+            windows = self.create_windows(data)
+        
         result.window_count = len(windows)
         
         # Analyze each window
@@ -612,7 +694,19 @@ class TrackStructuralExpert:
     
     def to_dict(self, result: TrackStructuralAnalysisResult) -> Dict[str, Any]:
         """Convert result to dictionary for JSON serialization."""
-        return {
+        
+        def recursive_sanitize(obj):
+            if isinstance(obj, dict):
+                return {k: recursive_sanitize(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [recursive_sanitize(v) for v in obj]
+            elif hasattr(obj, 'item'):  # Handle numpy types
+                return obj.item()
+            elif hasattr(obj, 'tolist'):
+                return obj.tolist()
+            return obj
+
+        raw_dict = {
             "file_path": result.file_path,
             "analysis_status": result.analysis_status,
             "timestamp": result.timestamp,
@@ -642,6 +736,8 @@ class TrackStructuralExpert:
             "alerts": result.alerts,
             "recommendations": result.recommendations
         }
+        
+        return recursive_sanitize(raw_dict)
 
 
 # Module-level functions

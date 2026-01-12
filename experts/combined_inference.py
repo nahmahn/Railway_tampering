@@ -671,7 +671,10 @@ class CombinedInferenceEngine:
         """Initialize combined inference engine."""
         self.visual_expert = VisualIntegrityExpert()
         self.thermal_expert = ThermalAnomalyExpert()
-        self.structural_expert = TrackStructuralExpert()
+        self.structural_expert = TrackStructuralExpert(
+            xgb_model_path="experts/xgb_metro_model.pkl",
+            scaler_path="experts/scaler_metro.pkl"
+        )
         
         self.output_structurer = GeminiOutputStructurer()
         self.reasoning_engine = ContextualReasoningEngine()
@@ -720,16 +723,20 @@ class CombinedInferenceEngine:
             for img_path in (image_paths or []):
                 try:
                     img_result = self.visual_expert.analyze_image(img_path)
-                    visual_results.append(self.visual_expert.to_dict(img_result))
+                    result_dict = self.visual_expert.to_dict(img_result)
+                    result_dict["file_url"] = img_path  # Add file URL for frontend
+                    visual_results.append(result_dict)
                 except Exception as e:
-                    visual_results.append({"file": img_path, "error": str(e)})
+                    visual_results.append({"file": img_path, "error": str(e), "file_url": img_path})
             
             for vid_path in (video_paths or []):
                 try:
                     vid_result = self.visual_expert.analyze_video(vid_path)
-                    visual_results.append(self.visual_expert.to_dict(vid_result))
+                    result_dict = self.visual_expert.to_dict(vid_result)
+                    result_dict["file_url"] = vid_path  # Add file URL for frontend
+                    visual_results.append(result_dict)
                 except Exception as e:
-                    visual_results.append({"file": vid_path, "error": str(e)})
+                    visual_results.append({"file": vid_path, "error": str(e), "file_url": vid_path})
             
             if visual_results:
                 result.visual_result = visual_results[0] if len(visual_results) == 1 else visual_results
@@ -754,12 +761,12 @@ class CombinedInferenceEngine:
         if csv_paths:
             structural_results = []
             
-            for csv_path in csv_paths:
-                try:
-                    csv_result = self.structural_expert.analyze_csv(csv_path)
-                    structural_results.append(self.structural_expert.to_dict(csv_result))
-                except Exception as e:
-                    structural_results.append({"file": csv_path, "error": str(e)})
+            try:
+                # Use analyze_files to handle potential merging of x/y/z files
+                structural_results_objs = self.structural_expert.analyze_files(csv_paths)
+                structural_results = [self.structural_expert.to_dict(r) for r in structural_results_objs]
+            except Exception as e:
+                structural_results.append({"error": str(e)})
             
             if structural_results:
                 result.structural_result = structural_results[0] if len(structural_results) == 1 else structural_results
@@ -795,8 +802,20 @@ class CombinedInferenceEngine:
         return result
     
     def to_dict(self, result: CombinedAnalysisResult) -> Dict[str, Any]:
-        """Convert CombinedAnalysisResult to dictionary."""
-        return {
+        """Convert CombinedAnalysisResult to dictionary and ensure serialization safety."""
+        
+        def recursive_sanitize(obj):
+            if isinstance(obj, dict):
+                return {k: recursive_sanitize(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [recursive_sanitize(v) for v in obj]
+            elif hasattr(obj, 'item'):  # Handle numpy types (bool_, float32, etc.)
+                return obj.item()
+            elif hasattr(obj, 'tolist'):  # Handle numpy arrays
+                return obj.tolist()
+            return obj
+
+        raw_dict = {
             "timestamp": result.timestamp,
             "session_id": result.session_id,
             "expert_results": {
@@ -826,6 +845,8 @@ class CombinedInferenceEngine:
                 "confidence": result.confidence
             }
         }
+        
+        return recursive_sanitize(raw_dict)
 
 
 # ==================== Example Usage ====================

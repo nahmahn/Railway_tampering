@@ -30,3 +30,14 @@ yarn-error.log*
 # OS specific
 .DS_Store
 Thumbs.db
+
+data
+
+# Uploads (generated at runtime, too large for git)
+uploads/
+
+# Model files (download at runtime)
+*.pt
+*.pth
+*.onnx
+*.pkl

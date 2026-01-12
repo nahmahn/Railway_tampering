@@ -124,6 +124,7 @@ class VisualIntegrityResult:
     recommendations: List[str] = field(default_factory=list)
     confidence: float = 0.0
     timestamp: str = ""
+    annotated_image_url: str = ""  # Path to annotated image with bounding boxes
 
 
 class VisualIntegrityExpert:
@@ -254,9 +255,17 @@ class VisualIntegrityExpert:
         
         texts = texts or self.tampering_texts
         
+        # Grounding DINO expects a single string with dot-separated queries
+        if isinstance(texts, list):
+            text_prompt = ". ".join(texts)
+            if not text_prompt.endswith("."):
+                text_prompt += "."
+        else:
+            text_prompt = texts
+
         try:
             image_pil = Image.open(image_path).convert("RGB")
-            inputs = self.gd_processor(images=image_pil, text=texts, return_tensors="pt")
+            inputs = self.gd_processor(images=image_pil, text=text_prompt, return_tensors="pt")
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
             
             with torch.no_grad():
@@ -338,6 +347,77 @@ class VisualIntegrityExpert:
         }
         return mapping.get(label.lower(), DetectionType.UNKNOWN)
     
+    def draw_and_save_annotated_image(
+        self, 
+        image: np.ndarray, 
+        detections: List[Detection],
+        original_path: str
+    ) -> str:
+        """
+        Draw bounding boxes on image and save annotated version.
+        
+        Args:
+            image: Original image (BGR format from cv2)
+            detections: List of Detection objects
+            original_path: Original file path for naming
+        
+        Returns:
+            URL path to annotated image (relative path for web)
+        """
+        if not CV2_AVAILABLE:
+            return ""
+        
+        annotated = image.copy()
+        
+        # Color mapping for detection types
+        colors = {
+            DetectionType.PERSON: (0, 0, 255),      # Red
+            DetectionType.FOREIGN_OBJECT: (0, 165, 255),  # Orange
+            DetectionType.TRAIN: (255, 0, 0),       # Blue
+            DetectionType.STONE: (0, 165, 255),     # Orange
+            DetectionType.DEBRIS: (0, 165, 255),    # Orange
+            DetectionType.VEHICLE: (255, 255, 0),   # Cyan
+            DetectionType.ANIMAL: (0, 255, 255),    # Yellow
+        }
+        default_color = (0, 255, 0)  # Green
+        
+        for det in detections:
+            if det.bounding_box:
+                x1, y1, x2, y2 = det.bounding_box
+                color = colors.get(det.detection_type, default_color)
+                
+                # Draw bounding box
+                cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+                
+                # Draw label background
+                label = f"{det.label or det.detection_type.value} {int(det.confidence * 100)}%"
+                (label_w, label_h), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                cv2.rectangle(annotated, (x1, y1 - label_h - 8), (x1 + label_w + 4, y1), color, -1)
+                
+                # Draw label text
+                cv2.putText(annotated, label, (x1 + 2, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        
+        # Save annotated image
+        import os
+        import uuid
+        
+        # Create uploads directory if not exists
+        uploads_dir = os.path.join(os.path.dirname(original_path) if os.path.dirname(original_path) else ".", "uploads")
+        if not os.path.exists(uploads_dir):
+            uploads_dir = "uploads"
+        os.makedirs(uploads_dir, exist_ok=True)
+        
+        # Generate annotated filename
+        base_name = os.path.basename(original_path)
+        name, ext = os.path.splitext(base_name)
+        annotated_filename = f"{name}_annotated{ext}"
+        annotated_path = os.path.join(uploads_dir, annotated_filename)
+        
+        cv2.imwrite(annotated_path, annotated)
+        
+        # Return relative URL path
+        return f"uploads/{annotated_filename}"
+    
     def analyze_image(
         self,
         file_path: str,
@@ -415,6 +495,9 @@ class VisualIntegrityExpert:
                     det.on_track = self.overlaps_track(det.bounding_box, track_mask)
             
             result.detections = all_detections
+            
+            # Draw and save annotated image with bounding boxes
+            result.annotated_image_url = self.draw_and_save_annotated_image(img, all_detections, file_path)
             
             # Build detection summary
             for det in all_detections:
@@ -646,6 +729,7 @@ class VisualIntegrityExpert:
             "file_type": result.file_type,
             "analysis_status": result.analysis_status,
             "timestamp": result.timestamp,
+            "annotated_image_url": result.annotated_image_url,  # Path to image with bounding boxes
             "detections": [
                 {
                     "type": d.detection_type.value,

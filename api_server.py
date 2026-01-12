@@ -25,6 +25,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -123,7 +124,10 @@ class AppState:
             print(f"⚠️ Thermal Expert initialization failed: {e}")
         
         try:
-            self.structural_expert = TrackStructuralExpert()
+            self.structural_expert = TrackStructuralExpert(
+                xgb_model_path="experts/xgb_metro_model.pkl",
+                scaler_path="experts/scaler_metro.pkl"
+            )
             print("✅ Track Structural Expert initialized")
         except Exception as e:
             print(f"⚠️ Structural Expert initialization failed: {e}")
@@ -201,11 +205,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount uploads directory for static access
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 
 # ==================== Helper Functions ====================
 
 def save_upload_file(upload_file: UploadFile) -> str:
-    """Save uploaded file and return path."""
+    """Save uploaded file and return paths."""
     file_id = str(uuid.uuid4())[:8]
     filename = f"{file_id}_{upload_file.filename}"
     file_path = UPLOAD_DIR / filename
@@ -213,7 +220,8 @@ def save_upload_file(upload_file: UploadFile) -> str:
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(upload_file.file, buffer)
     
-    return str(file_path)
+    # Return: (absolute path for file ops, relative path for URL)
+    return str(file_path), f"uploads/{filename}"
 
 
 def generate_session_id() -> str:
@@ -276,18 +284,14 @@ async def analyze_visual(
                 continue
             
             result_dict = app_state.visual_expert.to_dict(result)
+            result_dict["file_url"] = file_url
             results.append(result_dict)
             all_alerts.extend(result.alerts)
             
         except Exception as e:
             results.append({"file": file.filename, "error": str(e)})
         
-        finally:
-            # Cleanup uploaded file
-            try:
-                os.remove(file_path)
-            except:
-                pass
+
     
     return AnalysisResponse(
         success=True,
@@ -326,17 +330,14 @@ async def analyze_lidar(
         try:
             result = app_state.thermal_expert.analyze_lidar(file_path, meta)
             result_dict = app_state.thermal_expert.to_dict(result)
+            result_dict["file_url"] = file_url
             results.append(result_dict)
             all_alerts.extend(result.alerts)
             
         except Exception as e:
             results.append({"file": file.filename, "error": str(e)})
         
-        finally:
-            try:
-                os.remove(file_path)
-            except:
-                pass
+
     
     return AnalysisResponse(
         success=True,
@@ -375,17 +376,14 @@ async def analyze_vibration(
         try:
             result = app_state.structural_expert.analyze_csv(file_path, meta)
             result_dict = app_state.structural_expert.to_dict(result)
+            result_dict["file_url"] = file_url
             results.append(result_dict)
             all_alerts.extend(result.alerts)
             
         except Exception as e:
             results.append({"file": file.filename, "error": str(e)})
         
-        finally:
-            try:
-                os.remove(file_path)
-            except:
-                pass
+
     
     return AnalysisResponse(
         success=True,
@@ -420,11 +418,30 @@ async def analyze_combined(
     except:
         ctx = {}
     
-    # Save uploaded files
-    image_paths = [save_upload_file(f) for f in images]
-    video_paths = [save_upload_file(f) for f in videos]
-    lidar_paths = [save_upload_file(f) for f in lidar_files]
-    csv_paths = [save_upload_file(f) for f in csv_files]
+    # Save uploaded files - store both absolute paths for analysis and relative URLs for frontend
+    image_paths = []
+    image_urls = {}  # Map absolute path -> relative URL
+    for f in images:
+        abs_path, url_path = save_upload_file(f)
+        image_paths.append(abs_path)
+        image_urls[abs_path] = url_path
+        
+    video_paths = []
+    video_urls = {}
+    for f in videos:
+        abs_path, url_path = save_upload_file(f)
+        video_paths.append(abs_path)
+        video_urls[abs_path] = url_path
+        
+    lidar_paths = []
+    for f in lidar_files:
+        abs_path, url_path = save_upload_file(f)
+        lidar_paths.append(abs_path)
+        
+    csv_paths = []
+    for f in csv_files:
+        abs_path, url_path = save_upload_file(f)
+        csv_paths.append(abs_path)
     
     try:
         result = app_state.combined_engine.analyze(
@@ -437,6 +454,20 @@ async def analyze_combined(
         
         result_dict = app_state.combined_engine.to_dict(result)
         
+        # Post-process: Replace absolute file paths in visual_result with relative URLs for frontend
+        if "expert_results" in result_dict and result_dict["expert_results"].get("visual"):
+            visual = result_dict["expert_results"]["visual"]
+            if isinstance(visual, dict) and visual.get("file_url"):
+                abs_path = visual["file_url"]
+                if abs_path in image_urls:
+                    visual["file_url"] = image_urls[abs_path]
+            elif isinstance(visual, list):
+                for v in visual:
+                    if isinstance(v, dict) and v.get("file_url"):
+                        abs_path = v["file_url"]
+                        if abs_path in image_urls:
+                            v["file_url"] = image_urls[abs_path]
+
         return AnalysisResponse(
             success=True,
             session_id=session_id,
@@ -445,13 +476,9 @@ async def analyze_combined(
             alerts=result_dict.get("alerts", [])
         )
         
-    finally:
-        # Cleanup all uploaded files
-        for path in image_paths + video_paths + lidar_paths + csv_paths:
-            try:
-                os.remove(path)
-            except:
-                pass
+    except Exception as e:
+        print(f"Error in combined analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/analyze/combined-paths")
