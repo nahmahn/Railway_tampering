@@ -42,7 +42,19 @@ from experts.thermal_anomaly_expert import ThermalAnomalyExpert
 from experts.track_structural_expert import TrackStructuralExpert
 from experts.combined_inference import CombinedInferenceEngine, RealTimeAlertManager
 from experts.contextual_reasoning_expert import process_with_gemini, query_gemini
+from experts.combined_inference import CombinedInferenceEngine, RealTimeAlertManager
+from experts.contextual_reasoning_expert import process_with_gemini, query_gemini
 from experts.orchestration import RailwayTamperingOrchestrator
+
+# MongoDB Imports
+try:
+    from pymongo import MongoClient
+    from dotenv import load_dotenv
+    load_dotenv()  # Load environment variables from .env
+    MONGO_AVAILABLE = True
+except ImportError:
+    MONGO_AVAILABLE = False
+    print("Warning: pymongo or python-dotenv not installed. Database features disabled.")
 
 # Configuration
 UPLOAD_DIR = Path("./uploads")
@@ -106,10 +118,32 @@ class AppState:
         self.orchestrator: Optional[RailwayTamperingOrchestrator] = None
         self.alert_manager: Optional[RealTimeAlertManager] = None
         self.websocket_connections: List[WebSocket] = []
+        
+        # Database
+        self.mongo_client: Optional[MongoClient] = None
+        self.db = None
+        self.history_collection = None
     
     def initialize(self):
-        """Initialize all experts."""
+        """Initialize all experts and database."""
         print("Initializing experts...")
+        
+        # Initialize MongoDB
+        if MONGO_AVAILABLE:
+            try:
+                mongo_uri = os.getenv("MONGO_URI")
+                db_name = os.getenv("DB_NAME", "railway_tampering_db")
+                if mongo_uri:
+                    self.mongo_client = MongoClient(mongo_uri)
+                    self.db = self.mongo_client[db_name]
+                    self.history_collection = self.db["history"]
+                    # Test connection
+                    self.mongo_client.admin.command('ping')
+                    print("✅ Connected to MongoDB Atlas")
+                else:
+                    print("⚠️ MONGO_URI not found in environment variables. Database disabled.")
+            except Exception as e:
+                print(f"⚠️ MongoDB connection failed: {e}")
         
         try:
             self.visual_expert = VisualIntegrityExpert()
@@ -468,6 +502,18 @@ async def analyze_combined(
                         if abs_path in image_urls:
                             v["file_url"] = image_urls[abs_path]
 
+        # Save to Database
+        if app_state.history_collection is not None:
+            try:
+                # Create a copy for DB to avoid mutating original
+                db_record = result_dict.copy()
+                db_record["_id"] = session_id  # Use session ID as document ID
+                db_record["created_at"] = datetime.utcnow()
+                app_state.history_collection.insert_one(db_record)
+                print(f"Saved analysis {session_id} to MongoDB")
+            except Exception as e:
+                print(f"Error saving to MongoDB: {e}")
+
         return AnalysisResponse(
             success=True,
             session_id=session_id,
@@ -597,6 +643,25 @@ async def get_alerts():
             for a in alerts
         ]
     }
+
+
+@app.get("/api/history")
+async def get_history(limit: int = 10, skip: int = 0):
+    """Get analysis history from MongoDB."""
+    if not app_state.history_collection:
+        return {"history": []}
+    
+    try:
+        cursor = app_state.history_collection.find().sort("created_at", -1).skip(skip).limit(limit)
+        history = []
+        for doc in cursor:
+            doc["id"] = doc.pop("_id")  # Rename _id to id for frontend
+            doc.pop("created_at", None) # Remove if redundant with timestamp
+            history.append(doc)
+        
+        return {"history": history}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/alerts/acknowledge")

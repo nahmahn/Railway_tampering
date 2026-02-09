@@ -41,3 +41,5 @@ uploads/
 *.pth
 *.onnx
 *.pkl
+
+.env
