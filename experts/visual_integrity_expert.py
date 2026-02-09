@@ -135,7 +135,7 @@ class VisualIntegrityExpert:
     def __init__(
         self,
         yolo_model_path: str = "yolov8n.pt",
-        sam_checkpoint: str = None,
+        sam_checkpoint: str = "sam_vit_b_01ec64.pth",  # Set default
         device: str = None
     ):
         """Initialize the expert with required models."""
@@ -163,14 +163,30 @@ class VisualIntegrityExpert:
         
         # Initialize SAM
         self.sam_predictor = None
+        
+        # Check download if default is used and missing
+        if sam_checkpoint == "sam_vit_b_01ec64.pth" and not os.path.exists(sam_checkpoint):
+            print("Downloading SAM checkpoint...")
+            try:
+                import urllib.request
+                url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth"
+                urllib.request.urlretrieve(url, sam_checkpoint)
+                print("SAM checkpoint downloaded.")
+            except Exception as e:
+                print(f"Failed to download SAM checkpoint: {e}")
+
         self.sam_checkpoint = sam_checkpoint
         if SAM_AVAILABLE and sam_checkpoint and os.path.exists(sam_checkpoint):
             try:
+                print(f"Loading SAM from {sam_checkpoint}...")
                 sam = sam_model_registry["vit_b"](checkpoint=sam_checkpoint)
                 sam.to(self.device)
                 self.sam_predictor = SamPredictor(sam)
+                print("SAM loaded successfully.")
             except Exception as e:
                 print(f"Warning: Could not load SAM: {e}")
+        else:
+             print(f"SAM not loaded. Available: {SAM_AVAILABLE}, Checkpoint exists: {os.path.exists(sam_checkpoint) if sam_checkpoint else False}")
         
         # Tampering detection prompts for Grounding DINO
         self.tampering_texts = [
@@ -386,6 +402,40 @@ class VisualIntegrityExpert:
                 x1, y1, x2, y2 = det.bounding_box
                 color = colors.get(det.detection_type, default_color)
                 
+                # Draw segmentation mask if available
+                if det.segmentation_mask is not None:
+                    try:
+                        # Create colored mask
+                        # SAM masks are boolean, we need to apply color where True
+                        mask = det.segmentation_mask
+                        
+                        # Define alpha for blending
+                        alpha = 0.5
+                        
+                        # Create a color layer for the mask
+                        # color is (B, G, R)
+                        
+                        # Optimized way to blend only masked pixels
+                        # Extract region of interest (ROI) where mask is True
+                        # Note: Mask shape must match image shape
+                        
+                        if mask.shape[:2] == annotated.shape[:2]:
+                            # Create a colormap for the mask region
+                            # We can do this efficiently using boolean indexing
+                            
+                            roi = annotated[mask]
+                            
+                            # Create color overlay for these pixels
+                            overlay = np.full_like(roi, color, dtype=np.uint8)
+                            
+                            # Blend
+                            blended = cv2.addWeighted(roi, 1 - alpha, overlay, alpha, 0)
+                            
+                            # Put back
+                            annotated[mask] = blended
+                    except Exception as e:
+                        print(f"Error drawing mask: {e}")
+
                 # Draw bounding box
                 cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
                 
@@ -504,6 +554,19 @@ class VisualIntegrityExpert:
                         x1, y1, x2, y2 = det.bounding_box
                         color = colors.get(det.detection_type, default_color)
                         
+                        # Draw segmentation mask if available
+                        if det.segmentation_mask is not None:
+                            try:
+                                mask = det.segmentation_mask
+                                alpha = 0.5
+                                if mask.shape[:2] == frame.shape[:2]:
+                                    roi = frame[mask]
+                                    overlay = np.full_like(roi, color, dtype=np.uint8)
+                                    blended = cv2.addWeighted(roi, 1 - alpha, overlay, alpha, 0)
+                                    frame[mask] = blended
+                            except Exception:
+                                pass # Skip mask drawing on error to prevent crashing video generation
+
                         # Draw bounding box
                         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                         
@@ -626,6 +689,34 @@ class VisualIntegrityExpert:
             # Combine detections
             all_detections = yolo_detections + gd_detections
             
+            # --- SAM SEGMENTATION INTEGRATION ---
+            # Run SAM on all detections to get segmentation masks
+            # Note: SAM expects RGB image
+            if SAM_AVAILABLE and self.sam_predictor:
+                print(f"DEBUG: Running SAM on {len(all_detections)} detections")
+                try:
+                    # filtering detections with bounding boxes
+                    boxes_for_sam = [d.bounding_box for d in all_detections if d.bounding_box]
+                    if boxes_for_sam:
+                        print(f"DEBUG: Found {len(boxes_for_sam)} boxes for SAM")
+                        masks = self.run_sam_segmentation(img_rgb, boxes_for_sam)
+                        print(f"DEBUG: Generated {len(masks)} masks")
+                        
+                        # Assign masks back to detections
+                        mask_idx = 0
+                        for det in all_detections:
+                            if det.bounding_box:
+                                if mask_idx < len(masks):
+                                    det.segmentation_mask = masks[mask_idx]
+                                    mask_idx += 1
+                    else:
+                        print("DEBUG: No valid boxes for SAM")
+                except Exception as e:
+                    print(f"Error running SAM in analyze_image: {e}")
+            else:
+                print(f"DEBUG: SAM not available or not initialized. SAM_AVAILABLE={SAM_AVAILABLE}, predictor={self.sam_predictor is not None}")
+            # ------------------------------------
+
             # Mark detections on track
             for det in all_detections:
                 if det.bounding_box:
