@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/services/api';
+import { generateReportPDF } from '@/utils/pdfGenerator';
 import { Clock, Download, ExternalLink, Filter, Search, Eye, AlertTriangle, CheckCircle, Info } from 'lucide-react';
 import Link from 'next/link';
 
@@ -149,10 +150,20 @@ export default function HistoryPage() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors group">
-                                                <Eye size={18} />
-                                                <span className="sr-only">View Details</span>
-                                            </button>
+                                            <div className="flex justify-end gap-2">
+                                                <button
+                                                    onClick={() => generateReportPDF(item)}
+                                                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors group"
+                                                    title="Download Official Report"
+                                                >
+                                                    <Download size={18} />
+                                                    <span className="sr-only">Download Report</span>
+                                                </button>
+                                                <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors group">
+                                                    <Eye size={18} />
+                                                    <span className="sr-only">View Details</span>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
