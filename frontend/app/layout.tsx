@@ -13,6 +13,7 @@ export const metadata: Metadata = {
 };
 
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import { AlertProvider } from '@/contexts/AlertContext';
 
 export default function RootLayout({
   children,
@@ -23,7 +24,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.variable} antialiased`}>
         <GoogleOAuthProvider clientId="741472179168-ujrglefc9vjcusv1pg0muqhqihavds12.apps.googleusercontent.com">
-          {children}
+          <AlertProvider>
+            {children}
+          </AlertProvider>
         </GoogleOAuthProvider>
       </body>
     </html>

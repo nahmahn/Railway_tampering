@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { AlertTriangle, Activity, CheckCircle, Database, Eye, TrendingUp, TrendingDown } from 'lucide-react';
 import { RPFDashboard, MaintenanceDashboard, CCRDashboard } from './RoleDashboards';
+import { useAlerts } from '@/contexts/AlertContext';
 
 function StatCard({ label, value, subtext, icon: Icon, color, trend }: any) {
     return (
@@ -41,6 +42,7 @@ function StatCard({ label, value, subtext, icon: Icon, color, trend }: any) {
 function SystemAdminDashboard() {
     const [expandedNode, setExpandedNode] = useState<string | null>(null);
     const [time, setTime] = useState<string>("");
+    const { activeAlertCount, isConnected } = useAlerts();
 
     useEffect(() => {
         setTime(new Date().toLocaleTimeString());
@@ -57,7 +59,14 @@ function SystemAdminDashboard() {
 
             {/* Operations Summary */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <StatCard label="Active Alerts" value="3" subtext="+2 since last hour" icon={AlertTriangle} color="red" trend={12} />
+                <StatCard
+                    label="Active Alerts"
+                    value={activeAlertCount.toString()}
+                    subtext={activeAlertCount > 0 ? "Requires Attention" : "All Clear"}
+                    icon={AlertTriangle}
+                    color={activeAlertCount > 0 ? "red" : "green"}
+                    trend={activeAlertCount > 0 ? 12 : 0}
+                />
                 <StatCard label="System Health" value="98.2%" subtext="Optimal Performance" icon={CheckCircle} color="green" trend={0.5} />
                 <StatCard label="Data Stream" value="4.2 GB/s" subtext="Live Latency: 12ms" icon={Database} color="blue" trend={-2} />
                 <StatCard label="Visual Coverage" value="85%" subtext="12 Cams Active" icon={Eye} color="orange" trend={5} />

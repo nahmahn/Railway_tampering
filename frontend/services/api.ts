@@ -102,5 +102,15 @@ export const api = {
 
         // Otherwise, prepend /uploads/
         return `${UPLOADS_BASE_URL}/uploads/${cleanPath}`;
+    },
+
+    getHistory: async (): Promise<any[]> => {
+        try {
+            const response = await axios.get(`${API_BASE_URL}/history`);
+            return response.data.history;
+        } catch (error) {
+            console.error("API Error (History):", error);
+            return [];
+        }
     }
 };

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Activity, FileText, MessageSquare, LogOut, Map } from 'lucide-react';
+import { LayoutDashboard, Activity, FileText, MessageSquare, LogOut, Map, History } from 'lucide-react';
 import clsx from 'clsx';
 
 const navItems = [
@@ -10,6 +10,7 @@ const navItems = [
     { name: 'Live Monitoring', href: '/dashboard/monitoring', icon: Activity },
     { name: 'Map View', href: '/dashboard/map-view', icon: Map },
     { name: 'Analysis & Reports', href: '/dashboard/analysis', icon: FileText },
+    { name: 'History', href: '/dashboard/history', icon: History },
     { name: 'NLP Assistant', href: '/dashboard/chatbot', icon: MessageSquare },
 ];
 
