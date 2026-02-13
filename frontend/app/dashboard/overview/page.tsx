@@ -44,11 +44,41 @@ function SystemAdminDashboard() {
     const [time, setTime] = useState<string>("");
     const { activeAlertCount, isConnected } = useAlerts();
 
+    // Dynamic KPI States
+    const [systemHealth, setSystemHealth] = useState(98.2);
+    const [dataStream, setDataStream] = useState(4.2);
+    const [visualCoverage, setVisualCoverage] = useState(85);
+
     useEffect(() => {
         setTime(new Date().toLocaleTimeString());
         const timer = setInterval(() => setTime(new Date().toLocaleTimeString()), 1000);
-        return () => clearInterval(timer);
+
+        // Data Stream Simulation (fluctuate between 3.8 and 5.2)
+        const streamTimer = setInterval(() => {
+            setDataStream(prev => {
+                const change = (Math.random() - 0.5) * 0.4;
+                return Math.min(Math.max(Number((prev + change).toFixed(1)), 3.8), 5.2);
+            });
+        }, 2000);
+
+        return () => {
+            clearInterval(timer);
+            clearInterval(streamTimer);
+        };
     }, []);
+
+    // Update System Health based on active alerts
+    useEffect(() => {
+        let health = 100;
+        // Deduct health for each active alert (mock calculation)
+        if (activeAlertCount > 0) {
+            health = Math.max(70, 100 - (activeAlertCount * 5));
+        }
+        setSystemHealth(health);
+
+        // Visual coverage slightly impacted by system health
+        setVisualCoverage(Math.round(85 + (health - 90) * 0.5));
+    }, [activeAlertCount]);
 
     return (
         <div className="space-y-8">
@@ -67,9 +97,30 @@ function SystemAdminDashboard() {
                     color={activeAlertCount > 0 ? "red" : "green"}
                     trend={activeAlertCount > 0 ? 12 : 0}
                 />
-                <StatCard label="System Health" value="98.2%" subtext="Optimal Performance" icon={CheckCircle} color="green" trend={0.5} />
-                <StatCard label="Data Stream" value="4.2 GB/s" subtext="Live Latency: 12ms" icon={Database} color="blue" trend={-2} />
-                <StatCard label="Visual Coverage" value="85%" subtext="12 Cams Active" icon={Eye} color="orange" trend={5} />
+                <StatCard
+                    label="System Health"
+                    value={`${systemHealth}%`}
+                    subtext={systemHealth > 90 ? "Optimal Performance" : "Degraded Performance"}
+                    icon={CheckCircle}
+                    color={systemHealth > 90 ? "green" : "orange"}
+                    trend={systemHealth > 90 ? 0.5 : -2.5}
+                />
+                <StatCard
+                    label="Data Stream"
+                    value={`${dataStream} GB/s`}
+                    subtext="Live Latency: 12ms"
+                    icon={Database}
+                    color="blue"
+                    trend={(dataStream - 4.0) > 0 ? 1.2 : -0.8}
+                />
+                <StatCard
+                    label="Visual Coverage"
+                    value={`${visualCoverage}%`}
+                    subtext="12 Cams Active"
+                    icon={Eye}
+                    color="orange"
+                    trend={0}
+                />
             </div>
 
             {/* Main Content Grid */}

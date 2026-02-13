@@ -19,10 +19,12 @@ import os
 import json
 import uuid
 import shutil
+import asyncio
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from pathlib import Path
 from contextlib import asynccontextmanager
+import certifi
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
@@ -134,7 +136,7 @@ class AppState:
                 mongo_uri = os.getenv("MONGO_URI")
                 db_name = os.getenv("DB_NAME", "railway_tampering_db")
                 if mongo_uri:
-                    self.mongo_client = MongoClient(mongo_uri)
+                    self.mongo_client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
                     self.db = self.mongo_client[db_name]
                     self.history_collection = self.db["history"]
                     # Test connection
@@ -169,8 +171,8 @@ class AppState:
         try:
             self.combined_engine = CombinedInferenceEngine()
             self.alert_manager = self.combined_engine.alert_manager
-            # Register websocket broadcast handler
-            self.alert_manager.register_handler(self._broadcast_alert)
+            # Register websocket broadcast handler (use sync wrapper)
+            self.alert_manager.register_handler(self._broadcast_alert_sync)
             print("✅ Combined Inference Engine initialized")
         except Exception as e:
             print(f"⚠️ Combined Engine initialization failed: {e}")
@@ -183,28 +185,48 @@ class AppState:
     
     async def _broadcast_alert(self, alert):
         """Broadcast alert to all connected WebSocket clients."""
-        message = {
-            "type": "alert",
-            "data": {
-                "alert_id": alert.alert_id,
-                "timestamp": alert.timestamp,
-                "severity": alert.severity.value,
-                "title": alert.title,
-                "message": alert.message,
-                "action_required": alert.action_required
-            }
-        }
-        
-        disconnected = []
-        for ws in self.websocket_connections:
-            try:
-                await ws.send_json(message)
-            except:
-                disconnected.append(ws)
-        
-        for ws in disconnected:
-            self.websocket_connections.remove(ws)
+        try:
+            # Convert RealTimeAlert object to dictionary if it's not already
+            if hasattr(alert, "to_dict"):
+                alert_data = alert.to_dict()
+            else:
+                alert_data = {
+                    "alert_id": alert.alert_id,
+                    "timestamp": alert.timestamp,
+                    "severity": alert.severity.value if hasattr(alert.severity, "value") else alert.severity,
+                    "title": alert.title,
+                    "message": alert.message,
+                    "action_required": alert.action_required
+                }
 
+            message = {
+                "type": "alert",
+                "data": alert_data
+            }
+            
+            disconnected = []
+            for ws in self.websocket_connections:
+                try:
+                    await ws.send_json(message)
+                except:
+                    disconnected.append(ws)
+            
+            for ws in disconnected:
+                if ws in self.websocket_connections:
+                    self.websocket_connections.remove(ws)
+        except Exception as e:
+            print(f"Error broadcasting alert: {e}")
+
+    def _broadcast_alert_sync(self, alert):
+        """Synchronous wrapper for broadcasting alerts."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(self._broadcast_alert(alert))
+            else:
+                loop.run_until_complete(self._broadcast_alert(alert))
+        except Exception as e:
+            print(f"Error in sync broadcast: {e}")
 
 app_state = AppState()
 
@@ -648,7 +670,7 @@ async def get_alerts():
 @app.get("/api/history")
 async def get_history(limit: int = 10, skip: int = 0):
     """Get analysis history from MongoDB."""
-    if not app_state.history_collection:
+    if app_state.history_collection is None:
         return {"history": []}
     
     try:

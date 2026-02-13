@@ -21,14 +21,17 @@ export default function AnalysisPage() {
     const [analyzing, setAnalyzing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files?.length) return;
 
         setAnalyzing(true);
+        const startTime = Date.now();
         const files = Array.from(e.target.files);
 
         try {
             const result = await api.analyzeCombined(files);
+            const processingTime = ((Date.now() - startTime) / 1000).toFixed(2) + 's';
             console.log("Analysis Result:", result);
 
             // Map API result to Alert format
@@ -146,10 +149,11 @@ export default function AnalysisPage() {
                 img: imageUrl,
                 isVideo: isVideo, // Track if media is video for proper rendering
                 detections: detections, // For bounding box overlay
-                rawResult: result // Store raw result for detailed view if needed
+                rawResult: result, // Store raw result for detailed view if needed
+                processingTime: processingTime
             };
 
-            setAlerts(prev => [newAlert, ...prev]);
+            setAlerts([newAlert]);
             setSelectedAlert(newAlert);
 
         } catch (error) {
@@ -601,7 +605,7 @@ export default function AnalysisPage() {
                                     </div>
                                     <div className="bg-gray-50 p-3 rounded">
                                         <p className="text-xs text-gray-500">Processing Time</p>
-                                        <p className="font-mono font-bold text-xs text-gray-700">~2.5s</p>
+                                        <p className="font-mono font-bold text-xs text-gray-700">{selectedAlert.processingTime || '~2.5s'}</p>
                                     </div>
                                 </div>
                             </div>
