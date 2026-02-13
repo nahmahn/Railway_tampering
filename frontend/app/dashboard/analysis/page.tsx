@@ -85,7 +85,7 @@ const mapAnalysisToAlert = (data: any, id: string | number, processingTime: stri
         }
     }
 
-    // Fallbacks
+    // Fallbacks and Severity Overrides
     if (type === "Unknown Anomaly" && tampering && tampering.tampering_type && tampering.tampering_type !== "Unknown") {
         type = tampering.tampering_type;
     }
@@ -99,9 +99,21 @@ const mapAnalysisToAlert = (data: any, id: string | number, processingTime: stri
         severity = data.overall_risk_level.charAt(0).toUpperCase() + data.overall_risk_level.slice(1);
     }
 
+    // STRATEGIC OVERRIDE: If any expert alert mentions CRITICAL or HIGH, force severity upgrade
+    const allAlerts = [
+        ...(visual?.alerts || []),
+        ...(structural?.alerts || [])
+    ].join(' ').toUpperCase();
+
+    if (allAlerts.includes('CRITICAL')) severity = "Critical";
+    else if (allAlerts.includes('HIGH')) {
+        if (severity !== "Critical") severity = "High";
+    }
+
+    // Ensure Unique ID String (Session ID can be duplicate if multiple files in same session)
+    const uniqueId = String(id).includes('INC-') ? id : `INC-API-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+
     // Create Alert Object
-    // Use rawResult wrapper structure if needed, but here we embed 'data' as 'result' inside a fake wrapper
-    // or we construct a rawResult that resembles what the UI expects
     const rawResultWrapper = {
         success: true,
         session_id: String(id),
@@ -111,7 +123,7 @@ const mapAnalysisToAlert = (data: any, id: string | number, processingTime: stri
     };
 
     return {
-        id: id,
+        id: uniqueId,
         type: type,
         severity: severity,
         time: new Date(data.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),

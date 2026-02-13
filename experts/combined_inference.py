@@ -796,8 +796,28 @@ class CombinedInferenceEngine:
         result.tampering_detected = assessment.get("is_tampering_detected", False)
         result.confidence = assessment.get("confidence", 0)
         
-        tier = result.tampering_analysis.get("severity_classification", {}).get("tier", 1)
-        result.overall_risk_level = {4: "critical", 3: "high", 2: "medium", 1: "low"}.get(tier, "low")
+        # Aggregate severity from all experts to ensure we don't miss high/critical alerts
+        severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+        max_tier = result.tampering_analysis.get("severity_classification", {}).get("tier", 1)
+        
+        # Check individual results for higher severity
+        for exp_name, exp_res in expert_outputs.items():
+            res_list = exp_res if isinstance(exp_res, list) else [exp_res]
+            for r in res_list:
+                # Check visual/structural risk assessment fields
+                r_level = (r.get("risk_assessment", {}).get("risk_level") or 
+                           r.get("result", {}).get("risk_level") or 
+                           "low")
+                max_tier = max(max_tier, severity_rank.get(r_level.lower(), 1))
+                
+                # Check for "CRITICAL" keywords in alerts
+                alerts_list = r.get("alerts", [])
+                if any("CRITICAL" in str(a).upper() for a in alerts_list):
+                    max_tier = max(max_tier, 4)
+                elif any("HIGH" in str(a).upper() for a in alerts_list):
+                    max_tier = max(max_tier, 3)
+
+        result.overall_risk_level = {4: "critical", 3: "high", 2: "medium", 1: "low"}.get(max_tier, "low")
         
         return result
     
