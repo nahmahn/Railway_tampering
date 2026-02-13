@@ -1,121 +1,436 @@
-# Railway Tampering & Anomaly Detection System
+# Railway Tampering and Anomaly Detection System
 
 ![Status](https://img.shields.io/badge/status-active-success.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
+![Next.js](https://img.shields.io/badge/next.js-16-black.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg)
+![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248.svg)
 
 ## Overview
-Our solution is a **Meta-Model–based Mixture-of-Experts architecture** designed for real-time detection of anomalies and intentional track tampering across large rail networks. By fusing structural, visual, thermal, and contextual evidence, the system performs geo-referenced anomaly analysis, pinpoints affected track segments and hotspots, and generates actionable outputs including real-time alerts, visualizations, and operational action reports.
+
+A production-grade **Mixture-of-Experts (MoE)** system for real-time detection of railway track anomalies and intentional tampering across large rail networks. The platform fuses structural, visual, thermal, and contextual sensor evidence through independent expert agents, performs geo-referenced anomaly analysis, and generates actionable operational outputs including real-time alerts, incident reports, and automated dispatch workflows.
+
+Built for the **Ministry of Railways, Government of India**.
 
 ---
 
-## 🛠 Tech Stack
+## System Architecture
+
+```mermaid
+graph TB
+    subgraph Frontend["Frontend (Next.js 16 / React 19)"]
+        direction TB
+        LOGIN["Login Page<br/>Google OAuth 2.0"]
+        GUARD["DashboardGuard<br/>Route Protection"]
+        OV["Dashboard Overview"]
+        AN["Analysis and Reports"]
+        CB["NLP Assistant and Dispatch"]
+        MV["Geospatial Map View"]
+        RR["Risk Response Kanban"]
+        HI["Alert History"]
+        MO["Live Monitoring"]
+    end
+
+    subgraph Backend["Backend (FastAPI / Python)"]
+        direction TB
+        API["REST API Server"]
+        AUTH["Token Verification<br/>google-auth"]
+        VE["Visual Expert<br/>OpenCV / PyTorch"]
+        TE["Thermal Expert"]
+        SE["Structural Expert"]
+        GEM["Contextual Reasoning<br/>Google Gemini"]
+        CIE["Combined Inference<br/>Engine"]
+    end
+
+    subgraph Data["Data Layer"]
+        MONGO[("MongoDB Atlas<br/>railway_tampering_db")]
+        FS["File Storage<br/>uploads/"]
+    end
+
+    LOGIN --> GUARD --> OV
+    GUARD --> AN & CB & MV & RR & HI & MO
+    AN -->|"Analyze"| API
+    CB -->|"Query / Dispatch"| API
+    MV -->|"Alerts"| API
+    RR -->|"Missions"| API
+    API --> AUTH
+    API --> VE & TE & SE
+    VE & TE & SE --> CIE
+    CIE --> GEM
+    API --> MONGO
+    API --> FS
+```
+
+---
+
+## Data Flow: Detection to Resolution
+
+```mermaid
+sequenceDiagram
+    participant U as Operator
+    participant FE as Frontend
+    participant API as FastAPI
+    participant MoE as Expert Agents
+    participant DB as MongoDB
+    participant GEM as Gemini AI
+
+    U->>FE: Upload sensor data (images, video, LiDAR, CSV)
+    FE->>API: POST /api/analyze/combined
+    API->>MoE: Route to relevant experts
+    MoE->>MoE: Visual + Thermal + Structural analysis
+    MoE->>GEM: Contextual reasoning and synthesis
+    GEM-->>API: Combined assessment with risk level
+    API->>DB: Persist analysis session
+    API-->>FE: Analysis result with alerts
+
+    U->>FE: Click "Dispatch Team" on Map View
+    FE->>FE: Navigate to Chatbot with alert_id
+    FE->>API: POST /api/missions (with auth token)
+    API->>API: Verify Google ID Token
+    API->>DB: Create mission document
+    API-->>FE: Mission created
+
+    U->>FE: Advance mission on Kanban board
+    FE->>API: PATCH /api/missions/{id}/advance
+    API->>DB: Update mission stage
+    API-->>FE: Stage updated
+```
+
+---
+
+## Modules
+
+### 1. Dashboard Overview
+
+Central command view displaying aggregated KPIs, real-time alert counts, severity distribution charts, and recent analysis history. Provides at-a-glance situational awareness for operators.
+
+### 2. Analysis and Reports
+
+Multi-modal file upload interface supporting images, video, LiDAR point clouds, and CSV sensor data. The Mixture-of-Experts engine runs all applicable expert agents and produces:
+
+- Tampering confidence scores and evidence chains
+- Severity classification (Tier 1-4)
+- AI-generated remedial action plans
+- Professional Government-standard PDF reports with visual evidence, heatmaps, and time-series charts
+- One-click "Route to Risk Team" button to auto-create a mission and redirect to the Kanban board
+
+All analysis results are persisted to MongoDB for historical review.
+
+### 3. NLP Assistant and Dispatch (Planning and Logistics)
+
+Dual-purpose module combining a natural language chatbot (powered by Google Gemini) with an operational dispatch panel:
+
+- **Chat Tab**: Context-aware AI assistant for querying analysis results and operational guidance
+- **Planning Tab**: Real-time stats (active alerts, missions, crews), alert selection, crew roster from MongoDB, equipment checklists by alert type, and a dispatch action that creates a new mission
+
+Supports deep linking from the Map View via `?alert_id=` query parameter for seamless context transfer.
+
+### 4. Geospatial Map View (Hotspot Visualization)
+
+Interactive map built with React-Leaflet and OpenStreetMap (CartoDB Dark Matter tiles):
+
+- 12 zones mapped to real coordinates across the Delhi-NCR railway corridor
+- Severity-coded circular markers (green, yellow, orange, red)
+- Click-to-inspect: zone popups and side panel with specific alerts
+- Direct dispatch links from individual alert cards to the Planning module
+
+### 5. Risk Response (Kanban Board)
+
+5-stage mission lifecycle management:
+
+```mermaid
+graph LR
+    A["NEW"] -->|"Set Priority"| B["TRIAGED"]
+    B -->|"Assign Crew"| C["ASSIGNED"]
+    C -->|"Begin Work"| D["IN PROGRESS"]
+    D -->|"Add Resolution Notes"| E["RESOLVED"]
+```
+
+- Unrouted alerts from the database auto-populate the "New" column as virtual cards
+- Moving an alert from "New" auto-creates a persistent mission in MongoDB
+- Crew assignment dropdown sourced from the `crews` collection
+- Resolved missions are archived to a dedicated `resolved_issues` collection
+
+### 6. Alert History
+
+Chronological log of all past analysis sessions, sortable and filterable by severity, type, and date. Enables audit trails and trend analysis.
+
+### 7. Live Monitoring
+
+Real-time sensor status dashboard with WebSocket-powered alert streaming.
+
+---
+
+## Authentication and Security
+
+### Frontend Route Protection
+
+```mermaid
+graph LR
+    A["User visits /dashboard"] --> B{"Authenticated?"}
+    B -->|"No"| C["Redirect to /login"]
+    B -->|"Yes"| D["Render Dashboard"]
+    C --> E["Google OAuth Login"]
+    E -->|"ID Token"| F["Decode with jwt-decode"]
+    F --> G["Store in AuthContext"]
+    G --> D
+```
+
+- **Google OAuth 2.0** integration via `@react-oauth/google`
+- **AuthContext** manages session state and token lifecycle
+- **DashboardGuard** component wraps all `/dashboard/*` routes
+- Mock login available for development and demonstration
+
+### Backend API Security
+
+- All write endpoints (`POST /api/missions`, `PATCH /api/missions/*/advance`, `PATCH /api/missions/*/resolve`, `PATCH /api/crews/*/status`) require a valid Google ID Token in the `Authorization: Bearer <token>` header
+- Token verification using the `google-auth` library with Google's public key infrastructure
+- Read endpoints remain open for operational flexibility
+
+---
+
+## Expert Agents
+
+| Agent | Input Types | Detection Capabilities |
+|-------|-------------|----------------------|
+| Visual Integrity Expert | Images, Video (CCTV, Drone) | Component displacement, foreign objects, rail cutting, human activity |
+| Thermal Anomaly Expert | Thermal imagery, LiDAR | Thermal hotspots, structural fatigue signatures, point cloud deviations |
+| Track Structural Expert | CSV (accelerometer, geometric) | Vibration anomalies, gauge deviations, ballast disturbance |
+| Contextual Reasoning (Gemini) | All expert outputs | Cross-modal correlation, natural language synthesis, action planning |
+| Combined Inference Engine | All modalities | Unified risk scoring, confidence aggregation, alert generation |
+
+---
+
+## API Endpoints
+
+### Core Analysis
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | Health check and expert availability |
+| POST | `/api/analyze/visual` | Visual tampering analysis |
+| POST | `/api/analyze/lidar` | LiDAR/Thermal analysis |
+| POST | `/api/analyze/vibration` | Vibration/Structural analysis |
+| POST | `/api/analyze/combined` | Multi-expert combined analysis |
+| POST | `/api/query` | Natural language query (Gemini) |
+| GET | `/api/history` | Analysis session history |
+| GET | `/api/alerts` | Active alerts |
+
+### Crews and Missions (Authenticated)
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/crews` | No | List maintenance crews |
+| PATCH | `/api/crews/{id}/status` | Yes | Update crew availability |
+| GET | `/api/missions` | No | List missions (filterable by stage) |
+| POST | `/api/missions` | Yes | Create mission from alert session |
+| PATCH | `/api/missions/{id}/advance` | Yes | Advance mission to next stage |
+| PATCH | `/api/missions/{id}/resolve` | Yes | Resolve mission with notes |
+
+---
+
+## Tech Stack
 
 ### Frontend
-![Next.js](https://img.shields.io/badge/next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)
-![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
-![Tailwind CSS](https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white)
-![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)
-![Recharts](https://img.shields.io/badge/Recharts-22b5bf?style=for-the-badge&logo=react&logoColor=white)
 
-### Backend & AI
-![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
-![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=for-the-badge&logo=PyTorch&logoColor=white)
-![OpenCV](https://img.shields.io/badge/opencv-%23white.svg?style=for-the-badge&logo=opencv&logoColor=white)
-![Google Gemini](https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=google%20gemini&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
+| Technology | Purpose |
+|-----------|---------|
+| Next.js 16 | React framework with App Router |
+| React 19 | UI component library |
+| TypeScript | Type safety |
+| Tailwind CSS 4 | Utility-first styling |
+| React-Leaflet | Interactive geospatial maps |
+| Recharts | Dashboard charts and visualizations |
+| Axios | HTTP client with auth interceptor |
+| jwt-decode | Google ID Token parsing |
+| jsPDF / html2canvas | PDF report generation |
 
-### Data & Tools
-![Pandas](https://img.shields.io/badge/pandas-%23150458.svg?style=for-the-badge&logo=pandas&logoColor=white)
-![NumPy](https://img.shields.io/badge/numpy-%23013243.svg?style=for-the-badge&logo=numpy&logoColor=white)
-![Matplotlib](https://img.shields.io/badge/Matplotlib-%23ffffff.svg?style=for-the-badge&logo=Matplotlib&logoColor=black)
-![Seaborn](https://img.shields.io/badge/Seaborn-77ACF1?style=for-the-badge&logo=seaborn&logoColor=white)
-![Git](https://img.shields.io/badge/git-%23F05033.svg?style=for-the-badge&logo=git&logoColor=white)
+### Backend
 
----
-
-## Key Features
-
-### Real-Time Anomaly & Tampering Detection
-Continuous monitoring enables early detection of abnormal vibrations, structural deviations, thermal hotspots, foreign object presence, and unauthorized human activity before these escalate into safety-critical incidents.
-
-### Real-Time Alerts with Geo-Referenced Visualization
-All detections are geo-tagged and visualized on a map-based interface, highlighting impacted zones and hotspots. Alerts and notifications are pushed in real time to support rapid, localized response.
-
-### Automated Formal Incident Reporting
-The system generates **Professional Government-Standard PDF Reports** for every incident. These reports include:
-*   **Executive Summary & Technical Assessment**: AI-generated detailed analysis of the fault using expert terminology.
-*   **Visual Evidence & Analysis**: High-resolution charts (Time Series, Heatmaps) generated via Matplotlib/Seaborn to visualize vibration anomalies.
-*   **Remedial Action Plan**: Structured tables detailing urgency, ownership, and specific engineering steps.
-*   **Official Formatting**: Includes Government of India and Ministry of Railways branding, making reports ready for immediate official circulation.
-
-### Multi-Sensor, Multi-Stream Intelligence
-The system seamlessly handles diverse input streams: geometric sensors, accelerometers, DAS, CCTV, drones, thermal cameras, and LiDAR without requiring uniform coverage. Each modality contributes complementary evidence, enabling reliable detection even when some sensors are unavailable.
-
-### Comprehensive Tampering Analysis
-The system detects intentional track tampering by correlating structural, vibration, visual, and thermal cues. It identifies scenarios such as:
-*   Component manipulation
-*   Foreign object placement
-*   Rail cutting
-*   Ballast disturbance
-*   Signaling or cable tampering
+| Technology | Purpose |
+|-----------|---------|
+| FastAPI | Async REST API framework |
+| Python 3.9+ | Core language |
+| PyTorch | Deep learning inference |
+| OpenCV | Image and video processing |
+| Google Gemini | Contextual reasoning and NLP |
+| google-auth | OAuth2 ID Token verification |
+| MongoDB Atlas (PyMongo) | Persistent data storage |
+| Matplotlib / Seaborn | Chart generation for reports |
 
 ---
 
-## Unique Selling Points (USP)
+## Database Schema
 
-### 1. Evidence-Driven Mixture-of-Experts Architecture
-Unlike monolithic models, the system dynamically selects expert reasoning paths based on available evidence, enabling robustness, scalability, and explainability across large rail networks.
+```mermaid
+erDiagram
+    HISTORY {
+        string _id PK
+        string session_id
+        datetime timestamp
+        object result
+        string risk_level
+        boolean tampering_detected
+        float confidence
+        array file_paths
+    }
 
-### 2. Operationally Actionable Outputs
-The system goes beyond detection by generating clear action reports, mitigation steps, and **rerouting suggestions** that align with real railway operations.
+    CREWS {
+        string _id PK
+        string name
+        string lead
+        string specialization
+        string zone
+        string status
+    }
 
-### 3. Deep Geo-Spatial Intelligence
-All anomalies are geo-referenced, enabling precise localization, hotspot identification, and impact assessment across vast and distributed infrastructure.
+    MISSIONS {
+        string _id PK
+        string alert_session_id FK
+        string stage
+        string priority
+        string crew_id FK
+        string notes
+        datetime created_at
+        datetime updated_at
+    }
 
-### 4. Human-in-the-Loop Friendly Design
-Natural language queries, visual explanations, and contextual reasoning make the system usable by operators without requiring ML expertise.
+    RESOLVED_ISSUES {
+        string _id PK
+        string mission_id FK
+        string resolution_notes
+        datetime resolved_at
+        object original_mission
+    }
 
-### 5. Designed for Sparse, Real-World Deployments
-The architecture assumes imperfect sensor coverage and varying data quality, making it practical for nationwide railway adoption rather than controlled environments.
+    HISTORY ||--o{ MISSIONS : "generates"
+    CREWS ||--o{ MISSIONS : "assigned to"
+    MISSIONS ||--o| RESOLVED_ISSUES : "archived as"
+```
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
-*   Node.js 18+
-*   Python 3.9+
-*   Git
+
+- Node.js 18+
+- Python 3.9+
+- MongoDB Atlas account (or local MongoDB instance)
+- Google Cloud Console project with OAuth 2.0 Client ID
 
 ### Installation
 
-1.  **Clone the repository**
+1. **Clone the repository**
     ```bash
     git clone https://github.com/nahmahn/Railway_tampering.git
     cd Railway_tampering
     ```
 
-2.  **Frontend Setup**
+2. **Backend setup**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+3. **Configure environment variables**
+
+    Create a `.env` file in the project root:
+    ```env
+    MONGO_URI=mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/railway_tampering_db
+    GEMINI_API_KEY=<your-gemini-api-key>
+    ```
+
+    Create `frontend/.env.local`:
+    ```env
+    NEXT_PUBLIC_GEMINI_API_KEY=<your-gemini-api-key>
+    ```
+
+4. **Frontend setup**
     ```bash
     cd frontend
     npm install
+    ```
+
+### Running the Application
+
+1. **Start the backend**
+    ```bash
+    python api_server.py
+    ```
+    The API server starts at `http://localhost:8000`. API docs available at `http://localhost:8000/docs`.
+
+2. **Start the frontend**
+    ```bash
+    cd frontend
     npm run dev
     ```
-
-3.  **Backend Setup**
-    ```bash
-    # (Optional) Create a virtual environment
-    python -m venv .venv
-    # Windows
-    .venv\Scripts\activate
-    # macOS/Linux
-    source .venv/bin/activate
-
-    pip install -r backend/requirements.txt
-    ```
-
-## Demonstration
-Check out our live demonstration here: [Project Demo](https://shorturl.at/MmCfg)
+    The application opens at `http://localhost:3000`.
 
 ---
-*Built for Hack4Delhi*
+
+## Project Structure
+
+```
+Railway_tampering/
+├── api_server.py              # FastAPI server with all endpoints
+├── experts/
+│   ├── visual_integrity_expert.py
+│   ├── thermal_anomaly_expert.py
+│   ├── track_structural_expert.py
+│   ├── combined_inference.py
+│   └── contextual_reasoning_expert.py
+├── frontend/
+│   ├── app/
+│   │   ├── login/page.tsx           # Google OAuth login
+│   │   └── dashboard/
+│   │       ├── layout.tsx           # Protected layout with DashboardGuard
+│   │       ├── overview/page.tsx    # Dashboard KPIs
+│   │       ├── analysis/page.tsx    # Multi-modal analysis
+│   │       ├── chatbot/page.tsx     # NLP Assistant + Dispatch
+│   │       ├── map-view/page.tsx    # Geospatial hotspot map
+│   │       ├── response/page.tsx    # Risk Response Kanban
+│   │       ├── history/page.tsx     # Alert history
+│   │       └── monitoring/page.tsx  # Live monitoring
+│   ├── components/layout/
+│   │   ├── Header.tsx
+│   │   ├── Sidebar.tsx
+│   │   └── DashboardGuard.tsx       # Auth route protection
+│   ├── contexts/
+│   │   ├── AlertContext.tsx
+│   │   └── AuthContext.tsx          # Google Auth state management
+│   └── services/
+│       └── api.ts                   # API client with auth interceptor
+├── uploads/                         # Uploaded sensor files
+├── requirements.txt
+└── README.md
+```
+
+---
+
+## Unique Differentiators
+
+### Evidence-Driven Mixture-of-Experts Architecture
+Unlike monolithic models, the system dynamically selects expert reasoning paths based on available evidence. This enables robustness, horizontal scalability, and full explainability across large rail networks.
+
+### End-to-End Operational Workflow
+The platform goes beyond detection. It provides a complete lifecycle from anomaly detection through triage, crew dispatch, field resolution, and archival, all persisted and auditable.
+
+### Deep Geo-Spatial Intelligence
+All anomalies are geo-referenced to actual railway coordinates, enabling precise localization, hotspot clustering, and corridor-level impact assessment.
+
+### Designed for Sparse, Real-World Deployments
+The architecture assumes imperfect sensor coverage and varying data quality, making it practical for nationwide adoption rather than controlled test environments.
+
+### Human-in-the-Loop Friendly
+Natural language queries, visual explanations, contextual reasoning, and role-based interfaces make the system accessible to operators without machine learning expertise.
+
+---
+
+## Demonstration
+
+Live demonstration available at: [Project Demo](https://shorturl.at/MmCfg)
+
+---
+
+*Built for Hack4Delhi -- Ministry of Railways, Government of India*
