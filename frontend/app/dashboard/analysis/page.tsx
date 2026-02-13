@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { FileText, Printer, Check, Clock, Download, Upload, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -21,6 +21,41 @@ export default function AnalysisPage() {
     const [analyzing, setAnalyzing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // Load persisted state on mount
+    useEffect(() => {
+        const savedAlerts = localStorage.getItem('analysis_alerts');
+        const savedSelectedAlert = localStorage.getItem('analysis_selectedAlert');
+
+        if (savedAlerts) {
+            try {
+                const parsedAlerts = JSON.parse(savedAlerts);
+                // Only set if valid array
+                if (Array.isArray(parsedAlerts) && parsedAlerts.length > 0) {
+                    setAlerts(parsedAlerts);
+                }
+            } catch (e) { console.error("Failed to parse saved alerts", e); }
+        }
+
+        if (savedSelectedAlert) {
+            try {
+                const parsedSelected = JSON.parse(savedSelectedAlert);
+                if (parsedSelected) setSelectedAlert(parsedSelected);
+            } catch (e) { console.error("Failed to parse saved selection", e); }
+        }
+    }, []);
+
+    // Save state whenever it changes (debouncing could be good but direct is fine for now)
+    useEffect(() => {
+        if (alerts.length > 0 && alerts !== MOCK_ALERTS) {
+            localStorage.setItem('analysis_alerts', JSON.stringify(alerts));
+        }
+    }, [alerts]);
+
+    useEffect(() => {
+        if (selectedAlert) {
+            localStorage.setItem('analysis_selectedAlert', JSON.stringify(selectedAlert));
+        }
+    }, [selectedAlert]);
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files?.length) return;
