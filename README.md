@@ -413,8 +413,14 @@ Railway_tampering/
 ### Evidence-Driven Mixture-of-Experts Architecture
 Unlike monolithic models, the system dynamically selects expert reasoning paths based on available evidence. This enables robustness, horizontal scalability, and full explainability across large rail networks.
 
-### End-to-End Operational Workflow
-The platform goes beyond detection. It provides a complete lifecycle from anomaly detection through triage, crew dispatch, field resolution, and archival, all persisted and auditable.
+### Post-Detection Operational Architecture
+The post-detection layer facilitates the critical transition from anomaly identification to coordinated field resolution:
+
+1. **Structured Triage**: Every alert enters a "New" state for prioritization (P1–P4) based on risk severity, infrastructure criticality, and evidence confidence.
+2. **Intelligent Resource Allocation**: Maintenance crews are dynamically assigned using a live roster from MongoDB, filtered by specialization (e.g., structural, thermal, signaling) and real-time availability.
+3. **Dynamic Equipment Readiness**: The system generates context-aware equipment checklists tailored to the fault modality (e.g., torque gauges for displacement versus infrared kits for thermal stress).
+4. **Mission Lifecycle Governance**: Incidents progress through a five-stage controlled lifecycle (**New → Triaged → Assigned → In-Progress → Resolved**) with every state transition timestamped and persisted for auditability.
+5. **Operational Intelligence**: Resolved missions are archived in the `resolved_issues` collection, enabling long-term trend analysis, predictive maintenance modelling, and corridor-level health monitoring.
 
 ### Deep Geo-Spatial Intelligence
 All anomalies are geo-referenced to actual railway coordinates, enabling precise localization, hotspot clustering, and corridor-level impact assessment.
