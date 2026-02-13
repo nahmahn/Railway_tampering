@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import { FileText, Printer, Check, Clock, Download, Upload, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { FileText, Printer, Check, Clock, Download, Upload, Loader2, ArrowRightCircle } from 'lucide-react';
 import Image from 'next/image';
 
 import { jsPDF } from "jspdf";
@@ -14,48 +15,149 @@ const MOCK_ALERTS = [
     { id: 3, type: "Missing Clip", severity: "Low", time: "Yesterday", location: "KM-40.1", status: "Resolved", score: 45, img: "/mock-images/real_track_1.jpg" },
 ];
 
+const mapAnalysisToAlert = (data: any, id: string | number, processingTime: string = "~2.5s") => {
+    let imageUrl = "";
+    let type = "Unknown Anomaly";
+    let score = 0;
+    let severity = "Low";
+    let isCsvFile = false;
+    let isVideo = false;
+    let detections: any[] = [];
+
+    // Extract info from result
+    const expertResults = data.expert_results || {};
+    const visual = expertResults.visual || data.visual_result;
+    const structural = expertResults.structural || data.structural_result;
+    const tampering = data.tampering_analysis?.tampering_assessment;
+
+    // Visual Analysis
+    if (visual) {
+        const visItem = Array.isArray(visual) ? visual[0] : visual;
+
+        if (visItem?.file_type === 'video') {
+            isVideo = true;
+            if (visItem.annotated_image_url) imageUrl = api.getUploadUrl(visItem.annotated_image_url);
+            else if (visItem.file_url) imageUrl = api.getUploadUrl(visItem.file_url);
+        } else {
+            if (visItem && visItem.annotated_image_url) imageUrl = api.getUploadUrl(visItem.annotated_image_url);
+            else if (visItem && visItem.file_url) imageUrl = api.getUploadUrl(visItem.file_url);
+        }
+
+        if (visItem?.detections) detections = visItem.detections;
+
+        if (visItem?.tampering) {
+            const visTampering = visItem.tampering;
+            if (visTampering.tampering_types && visTampering.tampering_types.length > 0) {
+                type = visTampering.tampering_types[0];
+            }
+            if (visTampering.tampering_probability) {
+                score = Math.round(visTampering.tampering_probability * 100);
+            }
+        }
+
+        if (visItem?.risk_assessment) {
+            if (score === 0 && visItem.risk_assessment.confidence) {
+                score = Math.round(visItem.risk_assessment.confidence * 100);
+            }
+            if (visItem.risk_assessment.risk_level) {
+                severity = visItem.risk_assessment.risk_level.charAt(0).toUpperCase() + visItem.risk_assessment.risk_level.slice(1);
+            }
+        }
+    }
+
+    // Structural Analysis
+    if (structural && !imageUrl) {
+        const strucItem = Array.isArray(structural) ? structural[0] : structural;
+        if (strucItem) {
+            isCsvFile = true;
+            imageUrl = strucItem.file_path || strucItem.file_url || "csv_file";
+
+            if (strucItem.result) {
+                const strucResult = strucItem.result;
+                type = strucResult.tampering_detected ? "Vibration Anomaly" : "Normal Condition";
+                score = Math.round((strucResult.confidence || 0) * 100);
+                severity = strucResult.risk_level?.charAt(0).toUpperCase() + strucResult.risk_level?.slice(1) || "Low";
+            }
+
+            if (strucItem.vibration_analysis?.failure_ratio > 0.5) {
+                type = "Critical Vibration Anomaly";
+            }
+        }
+    }
+
+    // Fallbacks
+    if (type === "Unknown Anomaly" && tampering && tampering.tampering_type && tampering.tampering_type !== "Unknown") {
+        type = tampering.tampering_type;
+    }
+    if (score === 0 && tampering?.confidence) {
+        score = Math.round(tampering.confidence * 100);
+    }
+
+    if (data.overall_assessment?.risk_level) {
+        severity = data.overall_assessment.risk_level.charAt(0).toUpperCase() + data.overall_assessment.risk_level.slice(1);
+    } else if (data.overall_risk_level) {
+        severity = data.overall_risk_level.charAt(0).toUpperCase() + data.overall_risk_level.slice(1);
+    }
+
+    // Create Alert Object
+    // Use rawResult wrapper structure if needed, but here we embed 'data' as 'result' inside a fake wrapper
+    // or we construct a rawResult that resembles what the UI expects
+    const rawResultWrapper = {
+        success: true,
+        session_id: String(id),
+        timestamp: new Date().toISOString(),
+        result: data,
+        alerts: []
+    };
+
+    return {
+        id: id,
+        type: type,
+        severity: severity,
+        time: new Date(data.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        location: "Uploaded Evidence",
+        status: "New",
+        score: score,
+        img: imageUrl,
+        isVideo: isVideo,
+        detections: detections,
+        rawResult: rawResultWrapper,
+        processingTime: processingTime
+    };
+};
+
 export default function AnalysisPage() {
+    const router = useRouter();
     const [alerts, setAlerts] = useState<any[]>(MOCK_ALERTS);
     const [selectedAlert, setSelectedAlert] = useState<any>(MOCK_ALERTS[0]);
     const [generating, setGenerating] = useState(false);
     const [analyzing, setAnalyzing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Load persisted state on mount
+    // Load history from backend
     useEffect(() => {
-        const savedAlerts = localStorage.getItem('analysis_alerts');
-        const savedSelectedAlert = localStorage.getItem('analysis_selectedAlert');
-
-        if (savedAlerts) {
+        const fetchHistory = async () => {
             try {
-                const parsedAlerts = JSON.parse(savedAlerts);
-                // Only set if valid array
-                if (Array.isArray(parsedAlerts) && parsedAlerts.length > 0) {
-                    setAlerts(parsedAlerts);
+                const history = await api.getHistory();
+                if (history && history.length > 0) {
+                    // Map history items to Alert format
+                    // Sort by created_at desc (assuming history is already sorted or we sort here)
+                    const historyAlerts = history.map((item: any) => mapAnalysisToAlert(item, item._id, "Cached"));
+
+                    // Combine with mocks (history first)
+                    setAlerts([...historyAlerts, ...MOCK_ALERTS]);
+
+                    // Select first history item if available
+                    if (historyAlerts.length > 0) {
+                        setSelectedAlert(historyAlerts[0]);
+                    }
                 }
-            } catch (e) { console.error("Failed to parse saved alerts", e); }
-        }
-
-        if (savedSelectedAlert) {
-            try {
-                const parsedSelected = JSON.parse(savedSelectedAlert);
-                if (parsedSelected) setSelectedAlert(parsedSelected);
-            } catch (e) { console.error("Failed to parse saved selection", e); }
-        }
+            } catch (e) {
+                console.error("Failed to fetch history:", e);
+            }
+        };
+        fetchHistory();
     }, []);
-
-    // Save state whenever it changes (debouncing could be good but direct is fine for now)
-    useEffect(() => {
-        if (alerts.length > 0 && alerts !== MOCK_ALERTS) {
-            localStorage.setItem('analysis_alerts', JSON.stringify(alerts));
-        }
-    }, [alerts]);
-
-    useEffect(() => {
-        if (selectedAlert) {
-            localStorage.setItem('analysis_selectedAlert', JSON.stringify(selectedAlert));
-        }
-    }, [selectedAlert]);
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files?.length) return;
@@ -69,127 +171,15 @@ export default function AnalysisPage() {
             const processingTime = ((Date.now() - startTime) / 1000).toFixed(2) + 's';
             console.log("Analysis Result:", result);
 
-            // Map API result to Alert format
-            let imageUrl = ""; // Empty means show CSV placeholder
-            let type = "Unknown Anomaly";
-            let score = 0;
-            let severity = "Low";
-            let isCsvFile = false;
-            let isVideo = false; // Track if media is video
-            let detections: any[] = []; // For bounding box overlay
-
-            // Extract info from result - check expert_results structure
             if (result.result) {
-                const expertResults = result.result.expert_results;
-                const visual = expertResults?.visual || result.result.visual_result;
-                const structural = expertResults?.structural || result.result.structural_result;
-                const tampering = result.result.tampering_analysis?.tampering_assessment;
-
-                // Try to get image URL from visual result - prefer annotated image
-                if (visual) {
-                    const visItem = Array.isArray(visual) ? visual[0] : visual;
-
-                    // Check if this is a video file
-                    if (visItem?.file_type === 'video') {
-                        isVideo = true;
-                        // For videos, prefer annotated version if available
-                        if (visItem.annotated_image_url) {
-                            imageUrl = api.getUploadUrl(visItem.annotated_image_url);
-                        } else if (visItem.file_url) {
-                            imageUrl = api.getUploadUrl(visItem.file_url);
-                        }
-                    } else {
-                        // Use annotated image if available (has bounding boxes drawn)
-                        if (visItem && visItem.annotated_image_url) {
-                            imageUrl = api.getUploadUrl(visItem.annotated_image_url);
-                        } else if (visItem && visItem.file_url) {
-                            imageUrl = api.getUploadUrl(visItem.file_url);
-                        }
-                    }
-
-                    // Extract detections for bounding boxes
-                    if (visItem?.detections) {
-                        detections = visItem.detections;
-                    }
-
-                    // Get type and score from visual tampering info (this is more accurate)
-                    if (visItem?.tampering) {
-                        const visTampering = visItem.tampering;
-                        if (visTampering.tampering_types && visTampering.tampering_types.length > 0) {
-                            type = visTampering.tampering_types[0]; // Take first tampering type
-                        }
-                        if (visTampering.tampering_probability) {
-                            score = Math.round(visTampering.tampering_probability * 100);
-                        }
-                    }
-
-                    // Fallback to risk assessment
-                    if (visItem?.risk_assessment) {
-                        if (score === 0 && visItem.risk_assessment.confidence) {
-                            score = Math.round(visItem.risk_assessment.confidence * 100);
-                        }
-                        if (visItem.risk_assessment.risk_level) {
-                            severity = visItem.risk_assessment.risk_level.charAt(0).toUpperCase() + visItem.risk_assessment.risk_level.slice(1);
-                        }
-                    }
-                }
-
-                // Handle structural/CSV result
-                if (structural && !imageUrl) {
-                    const strucItem = Array.isArray(structural) ? structural[0] : structural;
-                    if (strucItem) {
-                        // Mark as CSV and get filename
-                        isCsvFile = true;
-                        imageUrl = strucItem.file_path || strucItem.file_url || "csv_file";
-
-                        // Extract meaningful info from structural result
-                        if (strucItem.result) {
-                            const strucResult = strucItem.result;
-                            type = strucResult.tampering_detected ? "Vibration Anomaly" : "Normal Condition";
-                            score = Math.round((strucResult.confidence || 0) * 100);
-                            severity = strucResult.risk_level?.charAt(0).toUpperCase() + strucResult.risk_level?.slice(1) || "Low";
-                        }
-
-                        // Use failure ratio for better type description
-                        if (strucItem.vibration_analysis?.failure_ratio > 0.5) {
-                            type = "Critical Vibration Anomaly";
-                        }
-                    }
-                }
-
-                // Override with top-level tampering info only if we don't have visual info
-                if (type === "Unknown Anomaly" && tampering && tampering.tampering_type && tampering.tampering_type !== "Unknown") {
-                    type = tampering.tampering_type;
-                }
-                if (score === 0 && tampering?.confidence) {
-                    score = Math.round(tampering.confidence * 100);
-                }
-
-                // Get severity from overall assessment
-                if (result.result.overall_assessment?.risk_level) {
-                    severity = result.result.overall_assessment.risk_level.charAt(0).toUpperCase() + result.result.overall_assessment.risk_level.slice(1);
-                } else if (result.result.overall_risk_level) {
-                    severity = result.result.overall_risk_level.charAt(0).toUpperCase() + result.result.overall_risk_level.slice(1);
-                }
+                const newAlert = mapAnalysisToAlert(result.result, result.session_id || Date.now(), processingTime);
+                setAlerts(prev => [newAlert, ...prev]);
+                setSelectedAlert(newAlert);
             }
 
-            const newAlert = {
-                id: Date.now(), // Generate a temp ID
-                type: type,
-                severity: severity,
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                location: "Uploaded File",
-                status: "New",
-                score: score,
-                img: imageUrl,
-                isVideo: isVideo, // Track if media is video for proper rendering
-                detections: detections, // For bounding box overlay
-                rawResult: result, // Store raw result for detailed view if needed
-                processingTime: processingTime
-            };
-
-            setAlerts([newAlert]);
-            setSelectedAlert(newAlert);
+            // Handled above
+            // setAlerts([newAlert]);
+            // setSelectedAlert(newAlert);
 
         } catch (error) {
             console.error("Analysis failed:", error);
@@ -521,6 +511,20 @@ export default function AnalysisPage() {
         setGenerating(false);
     };
 
+    const handleRouteToRisk = async () => {
+        if (!selectedAlert || typeof selectedAlert.id !== 'string') {
+            alert("Cannot route mock alerts. Please analyze a real file first.");
+            return;
+        }
+        try {
+            await api.createMission(selectedAlert.id, selectedAlert.severity === 'Critical' ? 'P1' : 'P2');
+            router.push('/dashboard/response');
+        } catch (e) {
+            console.error("Failed to route to risk:", e);
+            alert("Failed to create mission. It might already exist.");
+        }
+    };
+
     return (
         <div className="h-full flex flex-col space-y-6">
             <div className="flex justify-between items-center">
@@ -584,6 +588,13 @@ export default function AnalysisPage() {
                         <div className="flex gap-2">
                             <button className="border border-gray-300 text-gray-700 px-3 py-1 rounded text-sm hover:bg-gray-50 flex items-center gap-2">
                                 <Printer size={14} /> Print
+                            </button>
+                            <button
+                                onClick={handleRouteToRisk}
+                                className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 flex items-center gap-2 shadow-sm"
+                                title="Create Mission in Risk Response"
+                            >
+                                <ArrowRightCircle size={14} /> Route to Risk
                             </button>
                             <button
                                 onClick={handleGenerateReport}

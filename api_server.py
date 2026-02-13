@@ -26,12 +26,23 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 import certifi
 
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, Depends, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import uvicorn
+
+# Google OAuth verification
+try:
+    from google.oauth2 import id_token as google_id_token
+    from google.auth.transport import requests as google_requests
+    GOOGLE_AUTH_AVAILABLE = True
+except ImportError:
+    GOOGLE_AUTH_AVAILABLE = False
+    print("Warning: google-auth not installed. Token verification disabled.")
+
+GOOGLE_CLIENT_ID = "741472179168-ujrglefc9vjcusv1pg0muqhqihavds12.apps.googleusercontent.com"
 
 # Import expert modules
 import sys
@@ -99,6 +110,22 @@ class AlertAcknowledgeRequest(BaseModel):
     alert_id: str = Field(..., description="Alert ID to acknowledge")
 
 
+class CreateMissionRequest(BaseModel):
+    alert_session_id: str = Field(..., description="Session ID from history to create mission for")
+    priority: str = Field(default="P2", description="Priority P1-P4")
+    crew_id: Optional[str] = Field(default=None, description="Assigned crew ID")
+    notes: str = Field(default="", description="Mission notes")
+
+
+class AdvanceMissionRequest(BaseModel):
+    crew_id: Optional[str] = Field(default=None, description="Crew to assign (for ASSIGNED stage)")
+    priority: Optional[str] = Field(default=None, description="Priority (for TRIAGED stage)")
+
+
+class ResolveMissionRequest(BaseModel):
+    resolution_notes: str = Field(..., description="Resolution notes")
+
+
 class AnalysisResponse(BaseModel):
     success: bool
     session_id: str
@@ -125,6 +152,9 @@ class AppState:
         self.mongo_client: Optional[MongoClient] = None
         self.db = None
         self.history_collection = None
+        self.crews_collection = None
+        self.missions_collection = None
+        self.resolved_issues_collection = None
     
     def initialize(self):
         """Initialize all experts and database."""
@@ -139,9 +169,14 @@ class AppState:
                     self.mongo_client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
                     self.db = self.mongo_client[db_name]
                     self.history_collection = self.db["history"]
+                    self.crews_collection = self.db["crews"]
+                    self.missions_collection = self.db["missions"]
+                    self.resolved_issues_collection = self.db["resolved_issues"]
                     # Test connection
                     self.mongo_client.admin.command('ping')
                     print("✅ Connected to MongoDB Atlas")
+                    # Seed crews if empty
+                    self._seed_crews()
                 else:
                     print("⚠️ MONGO_URI not found in environment variables. Database disabled.")
             except Exception as e:
@@ -228,6 +263,27 @@ class AppState:
         except Exception as e:
             print(f"Error in sync broadcast: {e}")
 
+    def _seed_crews(self):
+        """Seed crews collection if empty."""
+        if self.crews_collection is None:
+            return
+        try:
+            if self.crews_collection.count_documents({}) == 0:
+                crews = [
+                    {"_id": "CR-001", "team_lead": "R. Kumar", "specialization": "Track P.Way", "zone": "Northern", "status": "available", "members": 4, "contact": "+91-98100-XXXXX"},
+                    {"_id": "CR-002", "team_lead": "S. Singh", "specialization": "Signal & Telecom", "zone": "Northern", "status": "available", "members": 3, "contact": "+91-98200-XXXXX"},
+                    {"_id": "CR-003", "team_lead": "A. Patel", "specialization": "Structural Engineering", "zone": "Western", "status": "available", "members": 5, "contact": "+91-98300-XXXXX"},
+                    {"_id": "CR-004", "team_lead": "M. Das", "specialization": "Emergency Response", "zone": "Northern", "status": "standby", "members": 6, "contact": "+91-98400-XXXXX"},
+                    {"_id": "CR-005", "team_lead": "V. Reddy", "specialization": "Track Welding", "zone": "Southern", "status": "available", "members": 3, "contact": "+91-98500-XXXXX"},
+                    {"_id": "CR-006", "team_lead": "K. Sharma", "specialization": "Inspection & QC", "zone": "Northern", "status": "available", "members": 4, "contact": "+91-98600-XXXXX"},
+                ]
+                self.crews_collection.insert_many(crews)
+                print(f"✅ Seeded {len(crews)} crews into MongoDB")
+            else:
+                print(f"✅ Crews collection already has {self.crews_collection.count_documents({})} records")
+        except Exception as e:
+            print(f"⚠️ Error seeding crews: {e}")
+
 app_state = AppState()
 
 
@@ -283,6 +339,35 @@ def save_upload_file(upload_file: UploadFile) -> str:
 def generate_session_id() -> str:
     """Generate unique session ID."""
     return f"API-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6]}"
+
+
+async def verify_google_token(authorization: Optional[str] = Header(default=None)):
+    """Verify Google OAuth2 ID token from Authorization header."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header missing")
+    
+    # Extract token from "Bearer <token>"
+    parts = authorization.split(" ")
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Invalid authorization format. Use: Bearer <token>")
+    
+    token = parts[1]
+    
+    # Allow mock token for development/demo
+    if token == "mock-token":
+        return {"email": "demo@railways.gov.in", "name": "Demo User", "sub": "mock"}
+    
+    if not GOOGLE_AUTH_AVAILABLE:
+        # If google-auth is not installed, allow all tokens (dev mode)
+        return {"email": "unknown", "name": "Unknown", "sub": "dev"}
+    
+    try:
+        id_info = google_id_token.verify_oauth2_token(
+            token, google_requests.Request(), GOOGLE_CLIENT_ID
+        )
+        return id_info
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
 
 
 # ==================== API Endpoints ====================
@@ -587,12 +672,40 @@ async def query_endpoint(request: QueryRequest):
     """
     session_id = generate_session_id()
     
+    # Fetch recent history context if available
+    history_context = []
+    if app_state.history_collection is not None:
+        try:
+            # Fetch last 20 records, projection to keep payload small
+            cursor = app_state.history_collection.find(
+                {}, 
+                {
+                    "session_id": 1, 
+                    "timestamp": 1, 
+                    "overall_assessment.risk_level": 1,
+                    "overall_assessment.confidence": 1,
+                    "alerts": 1,
+                    "summary": 1 
+                }
+            ).sort("created_at", -1).limit(20)
+            
+            for doc in cursor:
+                doc["id"] = doc.pop("_id")
+                # Simplify alerts for context
+                if "alerts" in doc and doc["alerts"]:
+                    doc["alert_summary"] = [a.get("title", "Alert") for a in doc["alerts"]]
+                    del doc["alerts"]
+                history_context.append(doc)
+        except Exception as e:
+            print(f"Failed to fetch history context: {e}")
+    
     try:
         result = query_gemini(
             question=request.query,
             track_structural_result=request.context.get("structural"),
             visual_integrity_result=request.context.get("visual"),
-            thermal_anomaly_result=request.context.get("thermal")
+            thermal_anomaly_result=request.context.get("thermal"),
+            history_context=history_context
         )
         
         return AnalysisResponse(
@@ -698,6 +811,202 @@ async def acknowledge_alert(request: AlertAcknowledgeRequest):
         raise HTTPException(status_code=404, detail=f"Alert not found: {request.alert_id}")
     
     return {"success": True, "alert_id": request.alert_id}
+
+
+# ==================== Crews & Missions API ====================
+
+@app.get("/api/crews")
+async def get_crews():
+    """Get all maintenance crews."""
+    if app_state.crews_collection is None:
+        return {"crews": []}
+    try:
+        crews = list(app_state.crews_collection.find())
+        for c in crews:
+            c["id"] = c.pop("_id")
+        return {"crews": crews}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/api/crews/{crew_id}/status")
+async def update_crew_status(crew_id: str, status: str = Form(...), user_info: dict = Depends(verify_google_token)):
+    """Update crew availability status."""
+    if app_state.crews_collection is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+    try:
+        result = app_state.crews_collection.update_one(
+            {"_id": crew_id},
+            {"$set": {"status": status}}
+        )
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail=f"Crew {crew_id} not found")
+        return {"success": True, "crew_id": crew_id, "status": status}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/missions")
+async def get_missions(stage: Optional[str] = None):
+    """Get all missions, optionally filtered by stage."""
+    if app_state.missions_collection is None:
+        return {"missions": []}
+    try:
+        query = {}
+        if stage:
+            query["stage"] = stage
+        missions = list(app_state.missions_collection.find(query).sort("created_at", -1))
+        for m in missions:
+            m["id"] = str(m.pop("_id"))
+            if "created_at" in m:
+                m["created_at"] = m["created_at"].isoformat()
+            if "updated_at" in m:
+                m["updated_at"] = m["updated_at"].isoformat()
+        return {"missions": missions}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/missions")
+async def create_mission(request: CreateMissionRequest, user_info: dict = Depends(verify_google_token)):
+    """Create a new mission from an alert/session."""
+    if app_state.missions_collection is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+    try:
+        # Fetch the source alert data from history
+        alert_data = {}
+        if app_state.history_collection is not None:
+            doc = app_state.history_collection.find_one({"_id": request.alert_session_id})
+            if doc:
+                alert_data = {
+                    "session_id": doc.get("_id", ""),
+                    "risk_level": doc.get("overall_assessment", {}).get("risk_level", "unknown"),
+                    "tampering_type": doc.get("tampering_analysis", {}).get("tampering_assessment", {}).get("tampering_type", "Unknown"),
+                    "confidence": doc.get("overall_assessment", {}).get("confidence", 0),
+                    "timestamp": doc.get("timestamp", ""),
+                }
+
+        mission_id = f"MSN-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:4]}"
+        mission = {
+            "_id": mission_id,
+            "alert_session_id": request.alert_session_id,
+            "alert_data": alert_data,
+            "stage": "assigned" if request.crew_id else "new",
+            "priority": request.priority,
+            "crew_id": request.crew_id,
+            "notes": request.notes,
+            "resolution_notes": "",
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+        }
+        
+        # If crew is assigned immediately, update their status
+        if request.crew_id and app_state.crews_collection is not None:
+            app_state.crews_collection.update_one(
+                {"_id": request.crew_id},
+                {"$set": {"status": "on_mission"}}
+            )
+            
+        app_state.missions_collection.insert_one(mission)
+        mission["id"] = mission.pop("_id")
+        mission["created_at"] = mission["created_at"].isoformat()
+        mission["updated_at"] = mission["updated_at"].isoformat()
+        return {"success": True, "mission": mission}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+MISSION_STAGES = ["new", "triaged", "assigned", "in_progress", "resolved"]
+
+@app.patch("/api/missions/{mission_id}/advance")
+async def advance_mission(mission_id: str, request: AdvanceMissionRequest, user_info: dict = Depends(verify_google_token)):
+    """Advance a mission to the next stage."""
+    if app_state.missions_collection is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+    try:
+        mission = app_state.missions_collection.find_one({"_id": mission_id})
+        if not mission:
+            raise HTTPException(status_code=404, detail=f"Mission {mission_id} not found")
+
+        current_stage = mission.get("stage", "new")
+        if current_stage not in MISSION_STAGES:
+            raise HTTPException(status_code=400, detail=f"Invalid current stage: {current_stage}")
+
+        current_idx = MISSION_STAGES.index(current_stage)
+        if current_idx >= len(MISSION_STAGES) - 1:
+            raise HTTPException(status_code=400, detail="Mission already resolved")
+
+        next_stage = MISSION_STAGES[current_idx + 1]
+        update = {"$set": {"stage": next_stage, "updated_at": datetime.utcnow()}}
+
+        # Apply optional fields based on stage transition
+        if request.priority:
+            update["$set"]["priority"] = request.priority
+        if request.crew_id:
+            update["$set"]["crew_id"] = request.crew_id
+            # Update crew status to on_mission
+            if app_state.crews_collection:
+                app_state.crews_collection.update_one(
+                    {"_id": request.crew_id},
+                    {"$set": {"status": "on_mission"}}
+                )
+
+        app_state.missions_collection.update_one({"_id": mission_id}, update)
+        return {"success": True, "mission_id": mission_id, "new_stage": next_stage}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/api/missions/{mission_id}/resolve")
+async def resolve_mission(mission_id: str, request: ResolveMissionRequest, user_info: dict = Depends(verify_google_token)):
+    """Resolve a mission with notes."""
+    if app_state.missions_collection is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+    try:
+        mission = app_state.missions_collection.find_one({"_id": mission_id})
+        if not mission:
+            raise HTTPException(status_code=404, detail=f"Mission {mission_id} not found")
+
+        # Free up the crew
+        crew_id = mission.get("crew_id")
+        if crew_id and app_state.crews_collection:
+            app_state.crews_collection.update_one(
+                {"_id": crew_id},
+                {"$set": {"status": "available"}}
+            )
+
+        app_state.missions_collection.update_one(
+            {"_id": mission_id},
+            {"$set": {
+                "stage": "resolved",
+                "resolution_notes": request.resolution_notes,
+                "resolved_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow(),
+            }}
+        )
+        
+        # Archive to resolved_issues collection
+        if hasattr(app_state, "resolved_issues_collection") and app_state.resolved_issues_collection is not None:
+             # Fetch the updated mission to archive
+             updated_mission = app_state.missions_collection.find_one({"_id": mission_id})
+             if updated_mission:
+                 # Create a copy for archival
+                 archive_doc = updated_mission.copy()
+                 
+                 # Check if already archived to avoid duplicates
+                 existing = app_state.resolved_issues_collection.find_one({"_id": mission_id})
+                 if not existing:
+                     app_state.resolved_issues_collection.insert_one(archive_doc)
+        
+        return {"success": True, "mission_id": mission_id, "stage": "resolved"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ==================== WebSocket for Real-time Alerts ====================

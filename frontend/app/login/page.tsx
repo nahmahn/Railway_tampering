@@ -1,28 +1,37 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Shield, ArrowRight } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
+import { jwtDecode } from "jwt-decode";
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginPage() {
     const router = useRouter();
+    const { login, user } = useAuth();
     const [loading, setLoading] = useState(false);
 
     const [role, setRole] = useState("Railway Protection Force (RPF)");
 
+    // Auto-redirect if already logged in
+    useEffect(() => {
+        if (user) {
+            router.push('/dashboard/overview');
+        }
+    }, [user, router]);
+
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        // Store the selected role for the session
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('userRole', role);
-        }
-
-        // Simulate delay
-        setTimeout(() => {
-            router.push('/dashboard/overview');
-        }, 1000);
+        // Simulator login for dev
+        const mockUser = {
+            name: "Demo User",
+            email: "demo@railways.gov.in",
+            picture: "",
+            role: role
+        };
+        login("mock-token", mockUser);
     };
 
     return (
@@ -95,13 +104,22 @@ export default function LoginPage() {
                         <GoogleLogin
                             onSuccess={credentialResponse => {
                                 console.log(credentialResponse);
-                                if (typeof window !== 'undefined') {
-                                    localStorage.setItem('userRole', role);
+                                if (credentialResponse.credential) {
+                                    setLoading(true);
+                                    try {
+                                        const decoded: any = jwtDecode(credentialResponse.credential);
+                                        const userData = {
+                                            name: decoded.name,
+                                            email: decoded.email,
+                                            picture: decoded.picture,
+                                            role: role
+                                        };
+                                        login(credentialResponse.credential, userData);
+                                    } catch (e) {
+                                        console.error("Login failed", e);
+                                        setLoading(false);
+                                    }
                                 }
-                                setLoading(true); // Show loading state
-                                setTimeout(() => {
-                                    router.push('/dashboard/overview');
-                                }, 1000);
                             }}
                             onError={() => {
                                 console.log('Login Failed');

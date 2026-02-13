@@ -2,14 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Activity, FileText, MessageSquare, LogOut, Map, History } from 'lucide-react';
+import { LayoutDashboard, Activity, FileText, MessageSquare, LogOut, Map, History, Route } from 'lucide-react';
 import clsx from 'clsx';
 
 const navItems = [
     { name: 'Overview', href: '/dashboard/overview', icon: LayoutDashboard },
     { name: 'Live Monitoring', href: '/dashboard/monitoring', icon: Activity },
-    { name: 'Map View', href: '/dashboard/map-view', icon: Map },
+    { name: 'Hotspot Map', href: '/dashboard/map-view', icon: Map },
     { name: 'Analysis & Reports', href: '/dashboard/analysis', icon: FileText },
+    { name: 'Risk Response', href: '/dashboard/response', icon: Route },
     { name: 'History', href: '/dashboard/history', icon: History },
     { name: 'NLP Assistant', href: '/dashboard/chatbot', icon: MessageSquare },
 ];

@@ -87,6 +87,10 @@ Format your responses with clear sections:
 2. **Findings**: Key observations from expert data
 3. **Risk Assessment**: Current risk level and factors
 4. **Recommendations**: Actionable next steps
+
+If "Historical Analysis Context" is provided:
+- You can answer questions about past trends, total alerts, or recent incidents.
+- Use the provided history list to calculate counts or summarize events.
 """
 
 
@@ -136,7 +140,6 @@ def _build_context_string(context: Dict[str, Any]) -> str:
 - Output: {json.dumps(vi.get('output', {}), indent=2, default=str)}
 """)
     
-    # Thermal Anomaly
     if context.get("thermal_anomaly"):
         ta = context["thermal_anomaly"]
         context_parts.append(f"""
@@ -145,6 +148,14 @@ def _build_context_string(context: Dict[str, Any]) -> str:
 - Confidence: {ta.get('confidence', 0):.1%}
 - Alerts: {', '.join(ta.get('alerts', [])) or 'None'}
 - Output: {json.dumps(ta.get('output', {}), indent=2, default=str)}
+""")
+
+    # Historical Context
+    if context.get("history"):
+        hist = context["history"]
+        context_parts.append(f"""
+## Historical Analysis Context (Last {len(hist)} records)
+{json.dumps(hist, indent=2, default=str)}
 """)
     
     if not context_parts:
@@ -288,7 +299,8 @@ def query_gemini(
     question: str,
     track_structural_result: Dict[str, Any] = None,
     visual_integrity_result: Dict[str, Any] = None,
-    thermal_anomaly_result: Dict[str, Any] = None
+    thermal_anomaly_result: Dict[str, Any] = None,
+    history_context: List[Dict[str, Any]] = None
 ) -> ReasoningResult:
     """
     Convenience function to query Gemini with a single question.
@@ -298,6 +310,7 @@ def query_gemini(
         track_structural_result: Result from track structural expert
         visual_integrity_result: Result from visual integrity expert
         thermal_anomaly_result: Result from thermal anomaly expert
+        history_context: List of recent historical analysis records
     
     Returns:
         ReasoningResult with response and insights
@@ -305,7 +318,8 @@ def query_gemini(
     context = {
         "track_structural": track_structural_result,
         "visual_integrity": visual_integrity_result,
-        "thermal_anomaly": thermal_anomaly_result
+        "thermal_anomaly": thermal_anomaly_result,
+        "history": history_context
     }
     
     result = process_with_gemini([question], context)
